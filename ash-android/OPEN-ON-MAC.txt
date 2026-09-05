@@ -1,0 +1,8 @@
+Ash — open this folder in Android Studio
+
+1. Android Studio → File → Open → this folder (the one that contains settings.gradle.kts).
+2. Let Gradle sync finish. First time can take several minutes.
+3. On the phone, enable Developer options and USB debugging.
+4. Plug the phone in, choose it in the device dropdown, press Run.
+
+The app is fully offline. Logs stay on the phone.

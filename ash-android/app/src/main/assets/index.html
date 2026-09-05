@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Ash</title>
+  <style>
+    :root {
+      --bg: #0c0c0d;
+      --fg: #f2f1ef;
+      --muted: #8e8d8a;
+      --card: #141416;
+      --secondary: #1c1c1f;
+      --border: #2a2a2e;
+      --primary: #e8e6e1;
+      --primary-fg: #0c0c0d;
+      --warning: #c4a574;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      background: var(--bg);
+      color: var(--fg);
+      font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    button { font: inherit; color: inherit; cursor: pointer; }
+    button:disabled { cursor: default; opacity: 0.4; }
+    input, select { font: inherit; color: inherit; }
+    h1, h2, h3 { text-wrap: balance; }
+    .wrap { max-width: 42rem; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
+    header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
+    .wordmark { font-family: Georgia, "Times New Roman", serif; font-size: 2.25rem; font-style: italic; line-height: 1; margin: 0; letter-spacing: -0.03em; }
+    .lede { margin: 0.5rem 0 0; color: var(--muted); font-size: 0.875rem; }
+    .icon-btn {
+      width: 2.75rem; height: 2.75rem; border: 0; border-radius: 0.5rem;
+      background: transparent; color: var(--muted);
+    }
+    .icon-btn:hover { background: var(--secondary); color: var(--fg); }
+    nav { position: sticky; top: 0; z-index: 10; background: color-mix(in srgb, var(--bg) 90%, transparent); padding: 0.75rem 0; margin: 0.5rem 0 1.5rem; }
+    .pills { display: flex; gap: 0.25rem; overflow-x: auto; }
+    .pill {
+      height: 2.75rem; padding: 0 1rem; border: 0; border-radius: 999px;
+      background: transparent; color: var(--muted); font-size: 0.875rem; font-weight: 500; white-space: nowrap;
+    }
+    .pill.on { background: var(--primary); color: var(--primary-fg); }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+    .card {
+      background: var(--card); border-radius: 1rem; padding: 1rem;
+      box-shadow: 0 0 0 1px rgb(255 255 255 / 0.08);
+    }
+    .kicker { margin: 0; font-size: 0.75rem; font-weight: 500; color: var(--muted); }
+    .display { font-family: Georgia, "Times New Roman", serif; font-size: 2.5rem; line-height: 1; margin: 0.5rem 0 0; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+    .display.sm { font-size: 1.5rem; }
+    .hint { margin: 0.5rem 0 0; font-size: 0.875rem; color: var(--muted); }
+    .section-title { font-size: 0.875rem; font-weight: 500; margin: 0 0 0.25rem; }
+    .group-h { display: flex; justify-content: space-between; margin: 1rem 0 0.5rem; }
+    .group-h p { margin: 0; font-size: 0.75rem; color: var(--muted); }
+    .group-h .lbl { font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; }
+    .ctx {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;
+    }
+    .ctx button {
+      min-height: 2.75rem; border: 0; border-radius: 0.75rem; padding: 0.6rem 0.75rem;
+      background: var(--card); text-align: left; font-size: 0.875rem;
+      box-shadow: 0 0 0 1px rgb(255 255 255 / 0.08);
+    }
+    .ctx button:active { transform: scale(0.96); }
+    .seg { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.25rem; background: var(--secondary); padding: 0.25rem; border-radius: 0.75rem; }
+    .seg button { height: 2.25rem; border: 0; border-radius: 0.5rem; background: transparent; color: var(--muted); font-size: 0.875rem; font-weight: 500; }
+    .seg button.on { background: var(--primary); color: var(--primary-fg); }
+    .bar-track { height: 0.5rem; background: var(--secondary); border-radius: 999px; overflow: hidden; }
+    .bar-fill { height: 100%; background: var(--primary); border-radius: inherit; }
+    .row { display: flex; align-items: center; gap: 0.75rem; padding: 0.35rem 0; }
+    .row .grow { flex: 1; min-width: 0; }
+    .ghost {
+      width: 2.75rem; height: 2.75rem; border: 0; background: transparent; color: var(--muted);
+    }
+    label { display: block; font-size: 0.75rem; font-weight: 500; color: var(--muted); margin-bottom: 0.35rem; }
+    input, select {
+      width: 100%; height: 2.75rem; border: 0; border-radius: 0.5rem; padding: 0 0.75rem;
+      background: var(--secondary); box-shadow: 0 0 0 1px rgb(255 255 255 / 0.08);
+    }
+    .btn {
+      height: 2.75rem; padding: 0 1rem; border: 0; border-radius: 0.5rem;
+      background: var(--primary); color: var(--primary-fg); font-size: 0.875rem; font-weight: 500;
+    }
+    .btn.outline { background: transparent; color: var(--fg); box-shadow: 0 0 0 1px rgb(255 255 255 / 0.08); }
+    .btn.ghost { background: transparent; color: var(--muted); }
+    .stack { display: flex; flex-direction: column; gap: 1.25rem; }
+    .hours { display: flex; align-items: flex-end; gap: 2px; height: 7rem; }
+    .hours span { flex: 1; background: #a8a6a1; border-radius: 3px 3px 0 0; min-height: 2px; }
+    .week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 0.35rem; }
+    .week .col { display: flex; flex-direction: column; align-items: center; gap: 0.35rem; }
+    .week .shaft { width: 100%; height: 6rem; background: var(--secondary); border-radius: 0.5rem; display: flex; align-items: flex-end; padding: 0.25rem; }
+    .week .fill { width: 100%; background: var(--primary); border-radius: 0.2rem; }
+    .toast {
+      position: fixed; top: 1rem; left: 50%; transform: translateX(-50%);
+      background: #1a1a1c; color: var(--fg); padding: 0.75rem 1rem; border-radius: 0.75rem;
+      box-shadow: 0 0 0 1px rgb(255 255 255 / 0.08); font-size: 0.875rem; z-index: 50;
+      display: none; align-items: center; gap: 0.75rem;
+    }
+    .toast.show { display: flex; }
+    .pack { display: grid; gap: 0.35rem; grid-template-columns: repeat(10, 1fr); }
+    .pack i { height: 0.7rem; border-radius: 0.2rem; background: var(--secondary); }
+    .pack i.on { background: var(--primary); }
+    .span3 { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+    .span3 button {
+      min-height: 2.75rem; border: 0; border-radius: 999px; padding: 0 0.9rem;
+      background: var(--secondary); color: var(--muted); font-size: 0.875rem; font-weight: 500;
+    }
+    .span3 button.on { background: var(--primary); color: var(--primary-fg); }
+    .span3 .sub { display: none; }
+    .hidden { display: none !important; }
+    .muted { color: var(--muted); font-size: 0.875rem; }
+    @media (prefers-reduced-motion: reduce) {
+      .ctx button:active { transform: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div>
+        <p class="wordmark">Ash</p>
+        <p class="lede">A private smoking ledger</p>
+      </div>
+      <button class="icon-btn" id="openSettings" aria-label="Settings">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9c.3.7 1 1.2 1.7 1.2H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>
+        </svg>
+      </button>
+    </header>
+    <nav>
+      <div class="pills" id="tabs"></div>
+    </nav>
+    <main id="main"></main>
+  </div>
+  <div class="toast" id="toast"><span id="toastMsg"></span><button class="btn ghost" id="toastAct" type="button"></button></div>
+
+  <script>
+    const CONTEXTS = [
+      { id: "before_meal", label: "Before a meal", short: "Meal", group: "before" },
+      { id: "before_meeting", label: "Before a meeting", short: "Meeting", group: "before" },
+      { id: "morning", label: "Morning", short: "Morning", group: "before" },
+      { id: "commute", label: "Commute", short: "Commute", group: "before" },
+      { id: "after_meal", label: "After a meal", short: "Meal", group: "after" },
+      { id: "after_meeting", label: "After a meeting", short: "Meeting", group: "after" },
+      { id: "night", label: "Night", short: "Night", group: "after" },
+      { id: "social", label: "Social", short: "Social", group: "around" },
+      { id: "coffee", label: "With a drink", short: "Drink", group: "around" },
+      { id: "work_break", label: "Work break", short: "Work", group: "around" },
+      { id: "stress", label: "Stress", short: "Stress", group: "around" },
+      { id: "boredom", label: "Boredom", short: "Boredom", group: "around" },
+      { id: "other", label: "Other", short: "Other", group: "around" },
+    ];
+    const BY_ID = Object.fromEntries(CONTEXTS.map((c) => [c.id, c]));
+    const GROUPS = [
+      { id: "before", label: "Before", hint: "The run-up" },
+      { id: "after", label: "After", hint: "The come-down" },
+      { id: "around", label: "Around", hint: "Alongside the day" },
+    ];
+    const KEY = "ash-ledger-v1-local";
+    const TABS = ["today", "dashboard", "packs", "patterns"];
+    const SPANS = [
+      { id: "commute", label: "Commute" },
+      { id: "sleep", label: "Sleep" },
+      { id: "meal", label: "Meal" },
+      { id: "meeting", label: "Meeting" },
+      { id: "work", label: "Work" },
+      { id: "gym", label: "Gym" },
+      { id: "flight", label: "Flight" },
+      { id: "other", label: "Other" },
+    ];
+
+    function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
+    function load() {
+      try { return JSON.parse(localStorage.getItem(KEY) || "null"); } catch { return null; }
+    }
+    function save(state) { localStorage.setItem(KEY, JSON.stringify(state)); }
+
+    const defaultState = () => ({
+      logs: [],
+      purchases: [],
+      spans: [],
+      settings: { currency: "USD", cigsPerPack: 20, defaultPackCost: 12.5, minutesPerCig: 6 },
+      tab: "today",
+      period: "week",
+      spanKind: "meal",
+    });
+    let state = Object.assign(defaultState(), load() || {});
+    if (!Array.isArray(state.spans)) state.spans = [];
+    if (!SPANS.some((k) => k.id === state.spanKind)) state.spanKind = "meal";
+
+    function persist() { save(state); }
+
+    const money = (n) => new Intl.NumberFormat(undefined, { style: "currency", currency: state.settings.currency }).format(n || 0);
+    function duration(mins) {
+      mins = Math.max(0, Math.round(mins));
+      if (mins < 60) return mins + "m";
+      const h = Math.floor(mins / 60), m = mins % 60;
+      return m ? h + "h " + m + "m" : h + "h";
+    }
+    function overlap(start, end, a, b) {
+      const x = Math.max(start, a), y = Math.min(end, b);
+      return Math.max(0, y - x);
+    }
+    function startOf(d, kind) {
+      const x = new Date(d);
+      if (kind === "day") { x.setHours(0,0,0,0); return x; }
+      if (kind === "week") {
+        const day = (x.getDay() + 6) % 7;
+        x.setDate(x.getDate() - day); x.setHours(0,0,0,0); return x;
+      }
+      x.setDate(1); x.setHours(0,0,0,0); return x;
+    }
+    function endOf(d, kind) {
+      const s = startOf(d, kind);
+      if (kind === "day") { s.setHours(23,59,59,999); return s; }
+      if (kind === "week") { s.setDate(s.getDate() + 6); s.setHours(23,59,59,999); return s; }
+      s.setMonth(s.getMonth() + 1); s.setMilliseconds(-1); return s;
+    }
+    function inRange(at, a, b) { return at >= a.getTime() && at <= b.getTime(); }
+    function remaining() {
+      const bought = state.purchases.reduce((s, p) => s + p.packs * p.cigsPerPack, 0);
+      return bought - state.logs.length;
+    }
+    function perCig() {
+      const cigs = state.purchases.reduce((s, p) => s + p.packs * p.cigsPerPack, 0);
+      const cost = state.purchases.reduce((s, p) => s + p.cost, 0);
+      return cigs ? cost / cigs : state.settings.defaultPackCost / state.settings.cigsPerPack;
+    }
+    function fmtTime(at) {
+      const d = new Date(at);
+      return String(d.getHours()).padStart(2,"0") + ":" + String(d.getMinutes()).padStart(2,"0");
+    }
+    function ago(at) {
+      const m = Math.floor((Date.now() - at) / 60000);
+      if (m < 1) return "Just now";
+      if (m < 60) return m + "m ago";
+      const h = Math.floor(m / 60);
+      if (h < 24) return (m % 60) ? h + "h " + (m % 60) + "m ago" : h + "h ago";
+      return fmtTime(at);
+    }
+
+    let toastTimer;
+    function toast(msg, undo) {
+      const el = document.getElementById("toast");
+      document.getElementById("toastMsg").textContent = msg;
+      const act = document.getElementById("toastAct");
+      if (undo) { act.textContent = "Undo"; act.classList.remove("hidden"); act.onclick = undo; }
+      else { act.classList.add("hidden"); }
+      el.classList.add("show");
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => el.classList.remove("show"), 3500);
+    }
+
+    function renderTabs() {
+      document.getElementById("tabs").innerHTML = TABS.map((t) =>
+        `<button class="pill ${state.tab===t?"on":""}" data-tab="${t}">${t[0].toUpperCase()+t.slice(1)}</button>`
+      ).join("");
+    }
+
+    function todayView() {
+      const now = new Date();
+      const a = startOf(now, "day"), b = endOf(now, "day");
+      const today = state.logs.filter((l) => inRange(l.at, a, b)).sort((x,y) => y.at - x.at);
+      const last = state.logs.slice().sort((x,y) => y.at - x.at)[0];
+      const rem = remaining();
+      const slots = Math.min(state.settings.cigsPerPack, 20);
+      const filled = rem <= 0 ? 0 : Math.min(rem, slots);
+      const live = (state.spans || []).find((s) => !s.end) || null;
+      if (live) state.spanKind = live.kind;
+      const spanBtns = SPANS.map((k) => {
+        const on = (live ? live.kind : state.spanKind) === k.id;
+        return `<button type="button" data-span="${k.id}" class="${on ? "on" : ""}" aria-pressed="${on}">${k.label}</button>`;
+      }).join("");
+      const liveCard = live
+        ? `<div class="card" style="display:flex;align-items:center;gap:1rem;margin-top:1rem">
+            <div class="grow"><p class="kicker">Live</p><p class="display sm">${duration((Date.now()-live.start)/60000)}</p>
+            <p class="hint">${SPANS.find((k)=>k.id===live.kind).label} since ${fmtTime(live.start)}</p></div>
+            <button class="btn" type="button" data-span-go="${live.kind}">End</button>
+          </div>`
+        : `<button class="btn" type="button" data-span-go="${state.spanKind}" style="margin-top:1rem">Start ${SPANS.find((k)=>k.id===state.spanKind).label.toLowerCase()}</button>`;
+      const todaySpans = (state.spans || []).filter((s) => overlap(s.start, s.end || Date.now(), a.getTime(), b.getTime()) > 0)
+        .sort((x,y) => y.start - x.start);
+      const spanList = todaySpans.map((s) => {
+        const k = SPANS.find((x) => x.id === s.kind) || { label: s.kind };
+        return `<div class="row"><div class="grow"><div>${k.label}</div><div class="muted">${fmtTime(s.start)}–${fmtTime(s.end)} · ${duration((s.end-s.start)/60000)}</div></div>
+          <button class="ghost" data-dels="${s.id}" aria-label="Remove">✕</button></div>`;
+      }).join("");
+      const groups = GROUPS.map((g) => {
+        const items = CONTEXTS.filter((c) => c.group === g.id).map((c) =>
+          `<button type="button" data-log="${c.id}" aria-label="${c.label}">${c.short}</button>`
+        ).join("");
+        return `<div class="group-h"><p class="lbl">${g.label}</p><p>${g.hint}</p></div><div class="ctx">${items}</div>`;
+      }).join("");
+      const list = today.length ? today.map((l) =>
+        `<div class="row"><div class="grow"><div>${BY_ID[l.context].label}</div><div class="muted">${fmtTime(l.at)}</div></div>
+         <button class="ghost" data-del="${l.id}" aria-label="Remove">✕</button></div>`
+      ).join("") : `<p class="muted">Empty so far. The first tap starts the day.</p>`;
+      return `
+        <div class="stack">
+          <div class="grid2">
+            <div class="card"><p class="kicker">Today</p><p class="display">${today.length}</p>
+              <p class="hint">${today.length === 1 ? "cigarette" : "cigarettes"} · ${today.length * state.settings.minutesPerCig}m</p></div>
+            <div class="card"><p class="kicker">Since the last</p><p class="display sm">${last ? ago(last.at) : "—"}</p>
+              <p class="hint">${last ? BY_ID[last.context].label : "Nothing logged yet"}</p></div>
+          </div>
+          <div>
+            <h2 class="section-title">No-smoke windows</h2>
+            <p class="hint" style="margin-top:0">Pick a category. Start when you cannot light up.</p>
+            <div class="span3">${spanBtns}</div>
+            ${liveCard}
+            ${spanList}
+          </div>
+          <div>
+            <h2 class="section-title">Log one</h2>
+            <p class="hint" style="margin-top:0">Tap the moment. You can undo.</p>
+            ${groups}
+          </div>
+          <div class="card">
+            <div style="display:flex;justify-content:space-between;align-items:baseline">
+              <h2 class="section-title">Open pack</h2><p class="muted">${rem} remaining</p>
+            </div>
+            <div class="pack">${Array.from({length: slots}, (_,i) => `<i class="${i<filled?"on":""}"></i>`).join("")}</div>
+          </div>
+          <div>
+            <h2 class="section-title">Today’s log</h2>
+            ${list}
+          </div>
+        </div>`;
+    }
+
+    function summarize(period) {
+      const now = new Date();
+      const a = startOf(now, period), b = endOf(now, period);
+      const logs = state.logs.filter((l) => inRange(l.at, a, b));
+      const spent = state.purchases.filter((p) => inRange(p.at, a, b)).reduce((s,p)=>s+p.cost,0);
+      const pc = perCig();
+      const byGroup = GROUPS.map((g) => ({
+        ...g, count: logs.filter((l) => BY_ID[l.context].group === g.id).length
+      }));
+      const byCtx = CONTEXTS.map((c) => ({ ...c, count: logs.filter((l) => l.context === c.id).length }))
+        .filter((c) => c.count).sort((x,y) => y.count - x.count);
+      const hours = Array.from({length: 24}, (_,h) => logs.filter((l) => new Date(l.at).getHours()===h).length);
+      const days = [1,2,3,4,5,6,0].map((d) => ({
+        label: ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][d],
+        count: logs.filter((l) => new Date(l.at).getDay()===d).length
+      }));
+      return { logs, spent, burned: logs.length * pc, byGroup, byCtx, hours, days, start: a, end: b };
+    }
+
+    function spanSummary(period) {
+      const now = Date.now();
+      const a = startOf(new Date(), period), b = endOf(new Date(), period);
+      return SPANS.map((k) => {
+        const ofKind = (state.spans || []).filter((s) => s.kind === k.id);
+        const minutes = ofKind.reduce((sum, s) => sum + overlap(s.start, s.end || now, a.getTime(), b.getTime()), 0) / 60000;
+        const count = ofKind.filter((s) => (s.end || now) >= a.getTime() && s.start <= b.getTime()).length;
+        return { ...k, minutes, count };
+      });
+    }
+
+    function periodLabel(period, start) {
+      if (period === "day") return "Today";
+      if (period === "week") return start.toLocaleDateString(undefined, { day: "numeric", month: "short" });
+      return start.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+    }
+
+    function dashboardView() {
+      const p = state.period || "week";
+      const s = summarize(p);
+      const ss = spanSummary(p);
+      const maxG = Math.max(1, ...s.byGroup.map((g) => g.count));
+      const maxH = Math.max(1, ...s.hours);
+      const maxS = Math.max(1, ...ss.map((x) => x.minutes));
+      return `
+        <div class="stack">
+          <div class="seg">${["day","week","month"].map((x)=>`<button data-period="${x}" class="${p===x?"on":""}">${x[0].toUpperCase()+x.slice(1)}</button>`).join("")}</div>
+          <p style="text-align:center;font-size:0.875rem;font-weight:500">${periodLabel(p, s.start)}</p>
+          <div class="grid2">
+            <div class="card"><p class="kicker">Cigarettes</p><p class="display sm">${s.logs.length}</p></div>
+            <div class="card"><p class="kicker">Time</p><p class="display sm">${duration(s.logs.length * state.settings.minutesPerCig)}</p></div>
+            <div class="card"><p class="kicker">Burned</p><p class="display sm">${money(s.burned)}</p></div>
+            <div class="card"><p class="kicker">Spent</p><p class="display sm">${money(s.spent)}</p></div>
+          </div>
+          <div class="card">
+            <h2 class="section-title">Time in the day</h2>
+            ${ss.map((g)=>`<div style="margin:0.6rem 0"><div style="display:flex;justify-content:space-between;font-size:0.875rem"><span>${g.label}</span><span class="muted">${duration(g.minutes)}${g.count? " · "+g.count : ""}</span></div><div class="bar-track"><div class="bar-fill" style="width:${(g.minutes/maxS)*100}%"></div></div></div>`).join("")}
+          </div>
+          <div class="card">
+            <h2 class="section-title">Where it sits</h2>
+            <p class="hint" style="margin-top:0;margin-bottom:0.75rem">Before, after, and around the day</p>
+            ${s.byGroup.map((g)=>`<div style="margin:0.6rem 0"><div style="display:flex;justify-content:space-between;font-size:0.875rem"><span>${g.label}</span><span class="muted">${g.count}</span></div><div class="bar-track"><div class="bar-fill" style="width:${(g.count/maxG)*100}%"></div></div></div>`).join("")}
+          </div>
+          <div class="card">
+            <h2 class="section-title">Hour of day</h2>
+            <div class="hours">${s.hours.map((n)=>`<span style="height:${Math.max((n/maxH)*100, n?6:2)}%"></span>`).join("")}</div>
+          </div>
+        </div>`;
+    }
+
+    function packsView() {
+      const rem = remaining();
+      const list = state.purchases.slice().sort((a,b)=>b.at-a.at);
+      return `
+        <div class="stack">
+          <div>
+            <h2 class="section-title" style="font-family:Georgia,serif;font-size:1.5rem">Purchases</h2>
+            <p class="hint">What you bought, and what each stick costs.</p>
+          </div>
+          <div class="grid2">
+            <div class="card"><p class="kicker">On hand</p><p class="display sm">${rem}</p></div>
+            <div class="card"><p class="kicker">Per cigarette</p><p class="display sm">${money(perCig())}</p></div>
+          </div>
+          <form id="buy" class="card" style="display:grid;gap:0.75rem">
+            <p class="section-title">Log a purchase</p>
+            <div><label>Brand</label><input name="brand" placeholder="Optional" /></div>
+            <div class="grid2">
+              <div><label>Packs</label><input name="packs" type="number" min="1" value="1" /></div>
+              <div><label>Cost</label><input name="cost" type="number" min="0" step="0.01" value="${state.settings.defaultPackCost}" /></div>
+            </div>
+            <button class="btn" type="submit">Save purchase</button>
+          </form>
+          ${list.map((p)=>`<div class="card row"><div class="grow"><div>${p.brand || "Unlabeled pack"}</div><div class="muted">${new Date(p.at).toLocaleDateString()} · ${p.packs} pack${p.packs===1?"":"s"}</div></div><div>${money(p.cost)}</div>
+            <button class="ghost" data-delp="${p.id}" aria-label="Remove">✕</button></div>`).join("")}
+        </div>`;
+    }
+
+    function patternsView() {
+      const s = summarize(state.period || "month");
+      const total = s.logs.length || 1;
+      const max = Math.max(1, ...(s.byCtx[0] ? [s.byCtx[0].count] : [1]));
+      const maxD = Math.max(1, ...s.days.map((d)=>d.count));
+      const top = s.byCtx[0];
+      return `
+        <div class="stack">
+          <div>
+            <h2 class="section-title" style="font-family:Georgia,serif;font-size:1.5rem">Patterns</h2>
+            <p class="hint">Before, after, and around.</p>
+          </div>
+          <div class="seg">${["day","week","month"].map((x)=>`<button data-period="${x}" class="${(state.period||"month")===x?"on":""}">${x[0].toUpperCase()+x.slice(1)}</button>`).join("")}</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.5rem">
+            ${s.byGroup.map((g)=>`<div class="card"><p class="kicker">${g.label}</p><p class="display sm">${g.count}</p><p class="hint">${Math.round(g.count/total*100)}%</p></div>`).join("")}
+          </div>
+          <div class="card">
+            <h2 class="section-title">Moments</h2>
+            ${s.byCtx.length ? s.byCtx.map((c)=>`<div style="margin:0.65rem 0"><div style="display:flex;justify-content:space-between;font-size:0.875rem"><span>${c.label}</span><span class="muted">${c.count} · ${Math.round(c.count/total*100)}%</span></div><div class="bar-track"><div class="bar-fill" style="width:${(c.count/max)*100}%"></div></div></div>`).join("") : `<p class="muted">No logs in this stretch.</p>`}
+          </div>
+          <div class="card">
+            <h2 class="section-title">Day of week</h2>
+            <div class="week">${s.days.map((d)=>`<div class="col"><div class="shaft"><div class="fill" style="height:${Math.max((d.count/maxD)*100, d.count?8:0)}%"></div></div><span class="muted">${d.label}</span></div>`).join("")}</div>
+          </div>
+          ${top ? `<p class="muted">Most often ${top.label.toLowerCase()} (${Math.round(top.count/total*100)}%).</p>` : ""}
+        </div>`;
+    }
+
+    function settingsView() {
+      const s = state.settings;
+      return `
+        <div class="stack">
+          <h2 class="section-title" style="font-family:Georgia,serif;font-size:1.5rem">Settings</h2>
+          <div class="card" style="display:grid;gap:0.75rem">
+            <div><label>Currency</label>
+              <select id="cur">${["USD","EUR","GBP","INR"].map((c)=>`<option ${s.currency===c?"selected":""}>${c}</option>`).join("")}</select></div>
+            <div class="grid2">
+              <div><label>Sticks per pack</label><input id="cpp" type="number" min="1" value="${s.cigsPerPack}" /></div>
+              <div><label>Default pack cost</label><input id="dpc" type="number" min="0" step="0.01" value="${s.defaultPackCost}" /></div>
+            </div>
+            <div><label>Minutes per cigarette</label><input id="mpc" type="number" min="1" value="${s.minutesPerCig}" /></div>
+            <button class="btn outline" id="wipe" type="button">Start with an empty ledger</button>
+          </div>
+        </div>`;
+    }
+
+    function render() {
+      persist();
+      renderTabs();
+      const main = document.getElementById("main");
+      if (state.tab === "settings") main.innerHTML = settingsView();
+      else if (state.tab === "dashboard") main.innerHTML = dashboardView();
+      else if (state.tab === "packs") main.innerHTML = packsView();
+      else if (state.tab === "patterns") { if (!state.period) state.period = "month"; main.innerHTML = patternsView(); }
+      else main.innerHTML = todayView();
+    }
+
+    document.body.addEventListener("click", (e) => {
+      const t = e.target.closest("[data-tab],[data-log],[data-del],[data-delp],[data-dels],[data-span],[data-span-go],[data-period],#openSettings,#wipe,#toastAct");
+      if (!t) return;
+      if (t.id === "openSettings") { state.tab = "settings"; render(); return; }
+      if (t.dataset.tab) { state.tab = t.dataset.tab; render(); return; }
+      if (t.dataset.period) { state.period = t.dataset.period; render(); return; }
+      if (t.dataset.span) {
+        const kind = t.dataset.span;
+        const live = (state.spans || []).find((s) => !s.end);
+        if (live) {
+          if (live.kind === kind) {
+            live.end = Date.now();
+            toast((SPANS.find((k) => k.id === kind) || {}).label + " ended");
+          } else {
+            live.end = Date.now();
+            state.spans.push({ id: uid(), kind, start: Date.now(), end: null });
+            state.spanKind = kind;
+            toast("Switched to " + (SPANS.find((k) => k.id === kind) || {}).label.toLowerCase());
+          }
+        } else {
+          state.spanKind = kind;
+        }
+        render();
+        return;
+      }
+      if (t.dataset.spanGo) {
+        const kind = t.dataset.spanGo;
+        const live = (state.spans || []).find((s) => !s.end);
+        if (live) {
+          live.end = Date.now();
+          toast((SPANS.find((k) => k.id === live.kind) || {}).label + " ended");
+        } else {
+          state.spans.push({ id: uid(), kind, start: Date.now(), end: null });
+          state.spanKind = kind;
+          toast((SPANS.find((k) => k.id === kind) || {}).label + " started");
+        }
+        render();
+        return;
+      }
+      if (t.dataset.log) {
+        const log = { id: uid(), at: Date.now(), context: t.dataset.log };
+        state.logs.push(log);
+        render();
+        toast("Logged " + BY_ID[log.context].label.toLowerCase(), () => {
+          state.logs = state.logs.filter((l) => l.id !== log.id); render();
+        });
+        return;
+      }
+      if (t.dataset.del) { state.logs = state.logs.filter((l) => l.id !== t.dataset.del); render(); return; }
+      if (t.dataset.delp) { state.purchases = state.purchases.filter((p) => p.id !== t.dataset.delp); render(); return; }
+      if (t.dataset.dels) { state.spans = state.spans.filter((s) => s.id !== t.dataset.dels); render(); return; }
+      if (t.id === "wipe") { state.logs = []; state.purchases = []; state.spans = []; render(); toast("Ledger cleared"); }
+    });
+    document.body.addEventListener("change", (e) => {
+      if (e.target.id === "cur") state.settings.currency = e.target.value;
+      if (e.target.id === "cpp") state.settings.cigsPerPack = Math.max(1, Number(e.target.value) || 20);
+      if (e.target.id === "dpc") state.settings.defaultPackCost = Math.max(0, Number(e.target.value) || 0);
+      if (e.target.id === "mpc") state.settings.minutesPerCig = Math.max(1, Number(e.target.value) || 6);
+      persist();
+    });
+    document.body.addEventListener("submit", (e) => {
+      if (e.target.id !== "buy") return;
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      const packs = Math.max(1, Number(fd.get("packs")) || 1);
+      const cost = Number(fd.get("cost"));
+      if (!cost || cost <= 0) { toast("Enter a cost greater than zero"); return; }
+      state.purchases.push({
+        id: uid(), at: Date.now(), brand: String(fd.get("brand") || "").trim(),
+        packs, cigsPerPack: state.settings.cigsPerPack, cost,
+      });
+      render();
+      toast("Purchase logged");
+    });
+    render();
+    setInterval(() => {
+      if (state.tab === "today" && (state.spans || []).some((s) => !s.end)) render();
+    }, 1000);
+  </script>
+</body>
+</html>
