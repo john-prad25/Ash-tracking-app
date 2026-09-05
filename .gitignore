@@ -3,3 +3,19 @@ node_modules/
 .github_repo
 .env
 .env.*
+.vercel
+.output
+.nitro
+.tanstack
+dist
+
+# Android Studio / Gradle
+ash-android/.gradle/
+ash-android/build/
+ash-android/app/build/
+ash-android/local.properties
+ash-android/.idea/
+*.iml
+*.apk
+*.ap_
+*.aab

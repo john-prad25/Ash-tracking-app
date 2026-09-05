@@ -6,7 +6,8 @@ import { Card } from "@/components/ui/card";
 import { formatDuration, formatTime } from "@/lib/format";
 import {
   activeSpanSummary,
-  openSpan,
+  openSpans,
+  runningSpan,
   SPAN_KINDS,
   SPAN_META,
   spanMsInRange,
@@ -27,12 +28,12 @@ export function NoSmokeTracker({
   onToggle: (kind: SpanKind) => void;
   onDelete: (id: string) => void;
 }) {
-  const live = openSpan(spans);
-  const [picked, setPicked] = useState<SpanKind>(live?.kind ?? "meal");
+  const live = useMemo(() => openSpans(spans), [spans]);
+  const [picked, setPicked] = useState<SpanKind>(live[0]?.kind ?? "meal");
 
   useEffect(() => {
-    if (live) setPicked(live.kind);
-  }, [live?.kind]);
+    if (live.length === 1) setPicked(live[0]!.kind);
+  }, [live]);
 
   const todaySpans = useMemo(() => {
     const start = startOfDay(now);
@@ -51,11 +52,14 @@ export function NoSmokeTracker({
   const pickedMeta = SPAN_META[picked];
 
   function onChip(kind: SpanKind) {
-    if (live) {
+    if (runningSpan(spans, kind)) {
       onToggle(kind);
       return;
     }
     setPicked(kind);
+    if (live.length > 0) {
+      onToggle(kind);
+    }
   }
 
   return (
@@ -63,7 +67,8 @@ export function NoSmokeTracker({
       <div className="mb-3">
         <h2 className="text-sm font-medium">No-smoke windows</h2>
         <p className="text-xs text-muted-foreground">
-          One tracker. Pick a category, start when you cannot light up, end when you can.
+          Pick a category, start when you cannot light up, end when you can. Different kinds can
+          run at the same time.
         </p>
       </div>
 
@@ -71,14 +76,15 @@ export function NoSmokeTracker({
         {SPAN_KINDS.map((kind) => {
           const meta = SPAN_META[kind];
           const Icon = meta.icon;
-          const selected = live ? live.kind === kind : picked === kind;
+          const kindLive = Boolean(runningSpan(spans, kind));
+          const selected = kindLive || (!kindLive && picked === kind && live.length === 0);
           return (
             <button
               key={kind}
               type="button"
               onClick={() => onChip(kind)}
               aria-pressed={selected}
-              aria-label={live && live.kind === kind ? meta.end : meta.label}
+              aria-label={kindLive ? meta.end : meta.label}
               className={cn(
                 "press-scale flex h-11 items-center gap-2 rounded-full px-3.5 text-sm font-medium transition-[background-color,color] duration-150",
                 selected
@@ -88,29 +94,33 @@ export function NoSmokeTracker({
             >
               <Icon className="size-3.5 shrink-0" strokeWidth={1.75} />
               {meta.label}
-              {live?.kind === kind ? <span className="live-dot" aria-hidden="true" /> : null}
+              {kindLive ? <span className="live-dot" aria-hidden="true" /> : null}
             </button>
           );
         })}
       </div>
 
-      {live ? (
-        <Card className="mt-4 flex flex-row items-center gap-4">
-          <div className="min-w-0 flex-1">
-            <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-              Live
-            </p>
-            <p className="mt-1 font-display text-3xl leading-none tracking-tight tabular-nums">
-              {formatDuration((now - live.start) / 60_000)}
-            </p>
-            <p className="mt-2 text-sm text-muted-foreground">
-              {SPAN_META[live.kind].label} since {formatTime(live.start)}
-            </p>
-          </div>
-          <Button type="button" onClick={() => onToggle(live.kind)}>
-            End
-          </Button>
-        </Card>
+      {live.length > 0 ? (
+        <div className="mt-4 flex flex-col gap-3">
+          {live.map((span) => (
+            <Card key={span.id} className="flex flex-row items-center gap-4">
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                  Live
+                </p>
+                <p className="mt-1 font-display text-3xl leading-none tracking-tight tabular-nums">
+                  {formatDuration((now - span.start) / 60_000)}
+                </p>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  {SPAN_META[span.kind].label} since {formatTime(span.start)}
+                </p>
+              </div>
+              <Button type="button" onClick={() => onToggle(span.kind)}>
+                End
+              </Button>
+            </Card>
+          ))}
+        </div>
       ) : (
         <Button className="mt-4 w-full sm:w-auto" type="button" onClick={() => onToggle(picked)}>
           Start {pickedMeta.label.toLowerCase()}

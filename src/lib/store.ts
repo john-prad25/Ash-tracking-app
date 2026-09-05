@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { createSampleMonth } from "./seed";
-import { openSpan } from "./spans";
+import { toggleSpanKind, undoSpanSwitchState, undoSpanToggleState } from "./spans";
 import type { ContextId, DaySpan, Purchase, PurchaseInput, Settings, SmokeLog, SpanKind } from "./types";
 import { uid } from "./utils";
 
@@ -21,11 +21,9 @@ export interface AshState {
   isSample: boolean;
   ensureSeeded: () => void;
   addSmoke: (context: ContextId) => SmokeLog;
+  restoreSmoke: (log: SmokeLog) => void;
   undoSmoke: (id: string) => void;
-  deleteSmoke: (id: string) => void;
-  toggleSpan: (
-    kind: SpanKind,
-  ) => { action: "start" | "end" | "switch"; span: DaySpan; previous?: DaySpan };
+  toggleSpan: (kind: SpanKind) => { action: "start" | "end"; span: DaySpan };
   undoSpanToggle: (id: string) => void;
   undoSpanSwitch: (startedId: string, previousId: string) => void;
   deleteSpan: (id: string) => void;
@@ -73,53 +71,22 @@ export const useAshStore = create<AshState>()(
         set((s) => ({ logs: [...s.logs, log] }));
         return log;
       },
+      restoreSmoke: (log) => {
+        set((s) => (s.logs.some((l) => l.id === log.id) ? s : { logs: [...s.logs, log] }));
+      },
       undoSmoke: (id) => {
         set((s) => ({ logs: s.logs.filter((l) => l.id !== id) }));
       },
-      deleteSmoke: (id) => {
-        set((s) => ({ logs: s.logs.filter((l) => l.id !== id) }));
-      },
       toggleSpan: (kind) => {
-        const open = openSpan(get().spans);
-        if (open && open.kind === kind) {
-          const span: DaySpan = { ...open, end: Date.now() };
-          set((s) => ({
-            spans: s.spans.map((x) => (x.id === open.id ? span : x)),
-          }));
-          return { action: "end" as const, span };
-        }
-        if (open) {
-          const previous: DaySpan = { ...open, end: Date.now() };
-          const span: DaySpan = { id: uid(), kind, start: Date.now(), end: null };
-          set((s) => ({
-            spans: [...s.spans.map((x) => (x.id === open.id ? previous : x)), span],
-          }));
-          return { action: "switch" as const, span, previous };
-        }
-        const span: DaySpan = { id: uid(), kind, start: Date.now(), end: null };
-        set((s) => ({ spans: [...s.spans, span] }));
-        return { action: "start" as const, span };
+        const result = toggleSpanKind(get().spans, kind, Date.now(), uid());
+        set({ spans: result.spans });
+        return { action: result.action, span: result.span };
       },
       undoSpanToggle: (id) => {
-        set((s) => {
-          const found = s.spans.find((x) => x.id === id);
-          if (!found) return s;
-          if (found.end === null) {
-            return { spans: s.spans.filter((x) => x.id !== id) };
-          }
-          const alreadyOpen = s.spans.some((x) => x.end === null);
-          if (alreadyOpen) {
-            return { spans: s.spans.filter((x) => x.id !== id) };
-          }
-          return { spans: s.spans.map((x) => (x.id === id ? { ...x, end: null } : x)) };
-        });
+        set((s) => ({ spans: undoSpanToggleState(s.spans, id) }));
       },
       undoSpanSwitch: (startedId, previousId) => {
-        set((s) => ({
-          spans: s.spans
-            .filter((x) => x.id !== startedId)
-            .map((x) => (x.id === previousId ? { ...x, end: null } : x)),
-        }));
+        set((s) => ({ spans: undoSpanSwitchState(s.spans, startedId, previousId) }));
       },
       deleteSpan: (id) => {
         set((s) => ({ spans: s.spans.filter((x) => x.id !== id) }));

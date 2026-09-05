@@ -27,8 +27,8 @@ export function DashboardView() {
 
   const { start, end } = useMemo(() => periodRange(period, anchor), [period, anchor]);
   const summary = useMemo(
-    () => summarizeRange(logs, purchases, settings, start, end),
-    [logs, purchases, settings, start, end],
+    () => summarizeRange(logs, purchases, settings, start, end, period),
+    [logs, purchases, settings, start, end, period],
   );
   const spanSummary = useMemo(
     () => activeSpanSummary(spans, logs, start, end),

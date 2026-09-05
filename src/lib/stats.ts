@@ -10,8 +10,11 @@ import {
   startOfDay,
   startOfMonth,
   startOfWeek,
+  subDays,
+  subMonths,
+  subWeeks,
 } from "date-fns";
-import { CONTEXT_BY_ID, GROUP_ORDER } from "./contexts";
+import { CONTEXT_BY_ID, GROUP_ORDER } from "./contexts.ts";
 import type {
   ContextGroup,
   ContextId,
@@ -37,6 +40,13 @@ export function shiftAnchor(period: Period, anchor: Date, direction: -1 | 1) {
   if (period === "day") return addDays(anchor, direction);
   if (period === "week") return addWeeks(anchor, direction);
   return addMonths(anchor, direction);
+}
+
+/** Calendar-correct previous window: shift the period start, then re-run periodRange. */
+export function previousRange(period: Period, start: Date) {
+  const anchor =
+    period === "day" ? subDays(start, 1) : period === "week" ? subWeeks(start, 1) : subMonths(start, 1);
+  return periodRange(period, anchor);
 }
 
 export function inRange(at: number, start: Date, end: Date) {
@@ -77,13 +87,14 @@ export function assignSmokeCosts(
     .slice()
     .sort((a, b) => a.at - b.at)
     .map((p) => ({
+      at: p.at,
       remaining: p.packs * p.cigsPerPack,
       per: p.packs * p.cigsPerPack > 0 ? p.cost / (p.packs * p.cigsPerPack) : fallbackPerCig,
     }));
 
   const ordered = logs.slice().sort((a, b) => a.at - b.at);
   for (const log of ordered) {
-    const lot = lots.find((l) => l.remaining > 0);
+    const lot = lots.find((l) => l.remaining > 0 && l.at <= log.at);
     if (lot) {
       lot.remaining -= 1;
       map.set(log.id, lot.per);
@@ -119,14 +130,11 @@ export function summarizeRange(
   settings: Settings,
   start: Date,
   end: Date,
+  period: Period,
 ): RangeSummary {
   const fallback = settings.cigsPerPack > 0 ? settings.defaultPackCost / settings.cigsPerPack : 0;
   const costs = assignSmokeCosts(logs, purchases, fallback);
-  const spanMs = end.getTime() - start.getTime();
-  const prevWindow = {
-    start: new Date(start.getTime() - spanMs - 1),
-    end: new Date(start.getTime() - 1),
-  };
+  const prevWindow = previousRange(period, start);
 
   const inCurrent = logs.filter((l) => inRange(l.at, start, end));
   const inPrev = logs.filter((l) => inRange(l.at, prevWindow.start, prevWindow.end));

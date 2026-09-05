@@ -15,6 +15,8 @@ export default tseslint.config(
       ".nitro/**",
       "node_modules/**",
       "src/routeTree.gen.ts",
+      "ash-android/**",
+      "artifacts/**",
     ],
   },
   js.configs.recommended,

@@ -1,8 +1,18 @@
 Ash — open this folder in Android Studio
 
+From the repo root, after any change to src/:
+
+  npm install
+  npm run build:android
+
+Then:
+
 1. Android Studio → File → Open → this folder (the one that contains settings.gradle.kts).
 2. Let Gradle sync finish. First time can take several minutes.
-3. On the phone, enable Developer options and USB debugging.
-4. Plug the phone in, choose it in the device dropdown, press Run.
+3. Build → Build Bundle(s) / APK(s) → Build APK(s).
+4. Copy app-debug.apk from app/build/outputs/apk/debug/ to the phone.
+5. Allow install from unknown sources, open the APK, install.
+
+Skip build:android and the APK will ship a stale copy of the app.
 
 The app is fully offline. Logs stay on the phone.
