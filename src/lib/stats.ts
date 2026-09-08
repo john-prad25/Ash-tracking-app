@@ -14,14 +14,18 @@ import {
   subMonths,
   subWeeks,
 } from "date-fns";
-import { CONTEXT_BY_ID, GROUP_ORDER } from "./contexts.ts";
+import { getContextDef, GROUP_ORDER } from "./contexts.ts";
+import { purchaseTotalCigs, totalPurchasedCigs } from "./purchases.ts";
 import type {
   ContextGroup,
-  ContextId,
+  CustomContext,
+  GiveAwayLog,
+  LoosePurchaseLog,
   Period,
   Purchase,
   Settings,
   SmokeLog,
+  TakenLog,
 } from "./types";
 
 const WEEK = { weekStartsOn: 1 as const };
@@ -64,42 +68,188 @@ export function periodLabel(period: Period, start: Date, end: Date, now = new Da
   return format(start, "MMMM yyyy");
 }
 
-export function inventoryRemaining(logs: SmokeLog[], purchases: Purchase[]) {
-  const bought = purchases.reduce((sum, p) => sum + p.packs * p.cigsPerPack, 0);
-  return bought - logs.length;
+export function totalGivenAway(giveAways: GiveAwayLog[]) {
+  return giveAways.reduce((sum, g) => sum + g.count, 0);
 }
 
-export function costPerCigarette(purchases: Purchase[], fallback: number) {
-  const cigs = purchases.reduce((sum, p) => sum + p.packs * p.cigsPerPack, 0);
-  const cost = purchases.reduce((sum, p) => sum + p.cost, 0);
+export function totalTaken(taken: TakenLog[]) {
+  return taken.reduce((sum, t) => sum + t.count, 0);
+}
+
+export function totalLoosePurchased(loosePurchases: LoosePurchaseLog[]) {
+  return loosePurchases.reduce((sum, l) => sum + l.count, 0);
+}
+
+export function totalLooseSpend(loosePurchases: LoosePurchaseLog[]) {
+  return loosePurchases.reduce((sum, l) => sum + l.cost, 0);
+}
+
+export function inventoryRemaining(
+  logs: SmokeLog[],
+  purchases: Purchase[],
+  giveAways: GiveAwayLog[] = [],
+  taken: TakenLog[] = [],
+  loosePurchases: LoosePurchaseLog[] = [],
+) {
+  const supply =
+    totalPurchasedCigs(purchases) + totalTaken(taken) + totalLoosePurchased(loosePurchases);
+  return supply - logs.length - totalGivenAway(giveAways);
+}
+
+export interface OpenPackState {
+  remaining: number;
+  openPackRemaining: number;
+  openPackCapacity: number;
+  sealedCigarettes: number;
+}
+
+export function openPackState(
+  logs: SmokeLog[],
+  purchases: Purchase[],
+  giveAways: GiveAwayLog[],
+  taken: TakenLog[],
+  loosePurchases: LoosePurchaseLog[],
+  fallbackCapacity: number,
+): OpenPackState {
+  const remaining = inventoryRemaining(logs, purchases, giveAways, taken, loosePurchases);
+  const consumed = logs.length + totalGivenAway(giveAways);
+  const sorted = purchases.slice().sort((a, b) => a.at - b.at);
+
+  let consumedLeft = consumed;
+  let packOpenCapacity = fallbackCapacity;
+  let sealedCigarettes = 0;
+
+  for (let i = 0; i < sorted.length; i += 1) {
+    const purchase = sorted[i]!;
+    const total = purchaseTotalCigs(purchase);
+    if (consumedLeft >= total) {
+      consumedLeft -= total;
+      continue;
+    }
+    packOpenCapacity = total;
+    sealedCigarettes = sorted
+      .slice(i + 1)
+      .reduce((sum, p) => sum + purchaseTotalCigs(p), 0);
+    break;
+  }
+
+  const openPackRemaining = Math.max(remaining - sealedCigarettes, 0);
+  const openPackCapacity =
+    sorted.length > 0
+      ? Math.max(packOpenCapacity, openPackRemaining, 1)
+      : Math.max(openPackRemaining, fallbackCapacity, 1);
+
+  return {
+    remaining,
+    openPackCapacity,
+    openPackRemaining,
+    sealedCigarettes,
+  };
+}
+
+export function costPerCigarette(
+  purchases: Purchase[],
+  loosePurchases: LoosePurchaseLog[],
+  fallback: number,
+) {
+  const cigs = totalPurchasedCigs(purchases) + totalLoosePurchased(loosePurchases);
+  const cost = purchases.reduce((sum, p) => sum + p.cost, 0) + totalLooseSpend(loosePurchases);
   if (cigs <= 0) return fallback;
   return cost / cigs;
 }
 
-/** FIFO: assign each smoke the cost of the pack it came from. */
+interface Lot {
+  at: number;
+  remaining: number;
+  per: number;
+}
+
+type TimelineEvent =
+  | { at: number; kind: "supply"; count: number; per: number }
+  | { at: number; kind: "smoke"; id: string }
+  | { at: number; kind: "give"; id: string; count: number };
+
+function timelineEvents(
+  logs: SmokeLog[],
+  purchases: Purchase[],
+  giveAways: GiveAwayLog[],
+  taken: TakenLog[],
+  loosePurchases: LoosePurchaseLog[],
+  fallbackPerCig: number,
+): TimelineEvent[] {
+  const events: TimelineEvent[] = [
+    ...purchases.map((p) => {
+      const total = purchaseTotalCigs(p);
+      return {
+        at: p.at,
+        kind: "supply" as const,
+        count: total,
+        per: total > 0 ? p.cost / total : fallbackPerCig,
+      };
+    }),
+    ...loosePurchases.map((l) => ({
+      at: l.at,
+      kind: "supply" as const,
+      count: l.count,
+      per: l.count > 0 ? l.cost / l.count : fallbackPerCig,
+    })),
+    ...taken.map((t) => ({
+      at: t.at,
+      kind: "supply" as const,
+      count: t.count,
+      per: 0,
+    })),
+    ...logs.map((l) => ({ at: l.at, kind: "smoke" as const, id: l.id })),
+    ...giveAways.map((g) => ({ at: g.at, kind: "give" as const, id: g.id, count: g.count })),
+  ];
+  return events.sort((a, b) => a.at - b.at);
+}
+
+function consumeFromLots(lots: Lot[], at: number, count: number) {
+  let left = count;
+  while (left > 0) {
+    const lot = lots.find((l) => l.remaining > 0 && l.at <= at);
+    if (!lot) break;
+    const take = Math.min(left, lot.remaining);
+    lot.remaining -= take;
+    left -= take;
+  }
+}
+
+/** FIFO: assign each smoke the cost of the lot it came from. */
 export function assignSmokeCosts(
   logs: SmokeLog[],
   purchases: Purchase[],
+  giveAways: GiveAwayLog[],
+  taken: TakenLog[],
+  loosePurchases: LoosePurchaseLog[],
   fallbackPerCig: number,
 ): Map<string, number> {
   const map = new Map<string, number>();
-  const lots = purchases
-    .slice()
-    .sort((a, b) => a.at - b.at)
-    .map((p) => ({
-      at: p.at,
-      remaining: p.packs * p.cigsPerPack,
-      per: p.packs * p.cigsPerPack > 0 ? p.cost / (p.packs * p.cigsPerPack) : fallbackPerCig,
-    }));
+  const lots: Lot[] = [];
 
-  const ordered = logs.slice().sort((a, b) => a.at - b.at);
-  for (const log of ordered) {
-    const lot = lots.find((l) => l.remaining > 0 && l.at <= log.at);
+  for (const event of timelineEvents(
+    logs,
+    purchases,
+    giveAways,
+    taken,
+    loosePurchases,
+    fallbackPerCig,
+  )) {
+    if (event.kind === "supply") {
+      lots.push({ at: event.at, remaining: event.count, per: event.per });
+      continue;
+    }
+    if (event.kind === "give") {
+      consumeFromLots(lots, event.at, event.count);
+      continue;
+    }
+    const lot = lots.find((l) => l.remaining > 0 && l.at <= event.at);
     if (lot) {
       lot.remaining -= 1;
-      map.set(log.id, lot.per);
+      map.set(event.id, lot.per);
     } else {
-      map.set(log.id, fallbackPerCig);
+      map.set(event.id, fallbackPerCig);
     }
   }
   return map;
@@ -114,12 +264,12 @@ export interface RangeSummary {
   prevMinutes: number;
   prevSpent: number;
   prevBurned: number;
-  byContext: { id: ContextId; label: string; group: ContextGroup; count: number }[];
+  byContext: { id: string; label: string; group: ContextGroup; count: number }[];
   byGroup: { group: ContextGroup; count: number }[];
   byDay: { key: string; label: string; count: number; burned: number }[];
   byHour: { hour: number; count: number }[];
   byWeekday: { day: number; label: string; count: number }[];
-  topContext: { id: ContextId; label: string; count: number; pct: number } | null;
+  topContext: { id: string; label: string; count: number; pct: number } | null;
   heaviestWeekday: { label: string; count: number } | null;
   avgGapMinutes: number | null;
 }
@@ -127,35 +277,51 @@ export interface RangeSummary {
 export function summarizeRange(
   logs: SmokeLog[],
   purchases: Purchase[],
+  giveAways: GiveAwayLog[],
+  taken: TakenLog[],
+  loosePurchases: LoosePurchaseLog[],
+  customContexts: CustomContext[],
   settings: Settings,
   start: Date,
   end: Date,
   period: Period,
 ): RangeSummary {
   const fallback = settings.cigsPerPack > 0 ? settings.defaultPackCost / settings.cigsPerPack : 0;
-  const costs = assignSmokeCosts(logs, purchases, fallback);
+  const costs = assignSmokeCosts(
+    logs,
+    purchases,
+    giveAways,
+    taken,
+    loosePurchases,
+    fallback,
+  );
   const prevWindow = previousRange(period, start);
 
   const inCurrent = logs.filter((l) => inRange(l.at, start, end));
   const inPrev = logs.filter((l) => inRange(l.at, prevWindow.start, prevWindow.end));
   const purchasesCurrent = purchases.filter((p) => inRange(p.at, start, end));
   const purchasesPrev = purchases.filter((p) => inRange(p.at, prevWindow.start, prevWindow.end));
+  const looseCurrent = loosePurchases.filter((l) => inRange(l.at, start, end));
+  const loosePrev = loosePurchases.filter((l) => inRange(l.at, prevWindow.start, prevWindow.end));
 
   const burned = inCurrent.reduce((sum, l) => sum + (costs.get(l.id) ?? fallback), 0);
   const prevBurned = inPrev.reduce((sum, l) => sum + (costs.get(l.id) ?? fallback), 0);
 
-  const contextCounts = new Map<ContextId, number>();
+  const contextCounts = new Map<string, number>();
   for (const log of inCurrent) {
     contextCounts.set(log.context, (contextCounts.get(log.context) ?? 0) + 1);
   }
 
   const byContext = [...contextCounts.entries()]
-    .map(([id, count]) => ({
-      id,
-      label: CONTEXT_BY_ID[id].short,
-      group: CONTEXT_BY_ID[id].group,
-      count,
-    }))
+    .map(([id, count]) => {
+      const def = getContextDef(id, customContexts);
+      return {
+        id,
+        label: def.short,
+        group: def.group,
+        count,
+      };
+    })
     .sort((a, b) => b.count - a.count);
 
   const byGroup = GROUP_ORDER.map((group) => ({
@@ -188,14 +354,13 @@ export function summarizeRange(
     label,
     count: inCurrent.filter((l) => new Date(l.at).getDay() === day).length,
   }));
-  // Monday-first for display
   const mondayFirst = [...byWeekday.slice(1), byWeekday[0]!];
 
   const top = byContext[0];
   const topContext = top
     ? {
         id: top.id,
-        label: CONTEXT_BY_ID[top.id].label,
+        label: getContextDef(top.id, customContexts).label,
         count: top.count,
         pct: inCurrent.length > 0 ? Math.round((top.count / inCurrent.length) * 100) : 0,
       }
@@ -220,11 +385,13 @@ export function summarizeRange(
   return {
     count: inCurrent.length,
     minutes: inCurrent.length * settings.minutesPerCig,
-    spent: purchasesCurrent.reduce((s, p) => s + p.cost, 0),
+    spent:
+      purchasesCurrent.reduce((s, p) => s + p.cost, 0) + totalLooseSpend(looseCurrent),
     burned,
     prevCount: inPrev.length,
     prevMinutes: inPrev.length * settings.minutesPerCig,
-    prevSpent: purchasesPrev.reduce((s, p) => s + p.cost, 0),
+    prevSpent:
+      purchasesPrev.reduce((s, p) => s + p.cost, 0) + totalLooseSpend(loosePrev),
     prevBurned,
     byContext,
     byGroup,

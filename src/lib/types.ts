@@ -11,6 +11,7 @@ export type ContextId =
   | "work_break"
   | "stress"
   | "boredom"
+  | "craving"
   | "other";
 
 export type ContextGroup = "before" | "after" | "around";
@@ -19,35 +20,47 @@ export type Currency = "USD" | "EUR" | "GBP" | "INR";
 
 export type Period = "day" | "week" | "month";
 
-export type SpanKind =
-  | "commute"
-  | "sleep"
-  | "meal"
-  | "meeting"
-  | "work"
-  | "gym"
-  | "flight"
-  | "other";
+export interface CustomContext {
+  id: string;
+  label: string;
+  group: ContextGroup;
+}
 
 export interface SmokeLog {
   id: string;
   at: number;
-  context: ContextId;
+  context: string;
 }
 
-export interface DaySpan {
+export interface GiveAwayLog {
   id: string;
-  kind: SpanKind;
-  start: number;
-  end: number | null;
+  at: number;
+  count: number;
+}
+
+export interface TakenLog {
+  id: string;
+  at: number;
+  count: number;
+}
+
+export interface LoosePurchaseLog {
+  id: string;
+  at: number;
+  count: number;
+  cost: number;
+}
+
+export interface PurchaseLine {
+  packs: number;
+  cigsPerPack: number;
 }
 
 export interface Purchase {
   id: string;
   at: number;
   brand: string;
-  packs: number;
-  cigsPerPack: number;
+  lines: PurchaseLine[];
   cost: number;
 }
 
@@ -61,7 +74,6 @@ export interface Settings {
 export interface PurchaseInput {
   at: number;
   brand: string;
-  packs: number;
-  cigsPerPack: number;
+  lines: PurchaseLine[];
   cost: number;
 }

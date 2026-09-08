@@ -4,11 +4,12 @@ import { endOfMonth, startOfMonth } from "date-fns";
 import {
   assignSmokeCosts,
   inventoryRemaining,
+  openPackState,
   periodRange,
   previousRange,
   summarizeRange,
 } from "./stats.ts";
-import type { Purchase, Settings, SmokeLog } from "./types.ts";
+import type { GiveAwayLog, LoosePurchaseLog, Purchase, Settings, SmokeLog, TakenLog } from "./types.ts";
 
 const settings: Settings = {
   currency: "USD",
@@ -22,7 +23,19 @@ function log(id: string, at: Date): SmokeLog {
 }
 
 function pack(id: string, at: Date, cost = 20, cigs = 20, packs = 1): Purchase {
-  return { id, at: at.getTime(), brand: "Test", packs, cigsPerPack: cigs, cost };
+  return { id, at: at.getTime(), brand: "Test", lines: [{ packs, cigsPerPack: cigs }], cost };
+}
+
+function give(id: string, at: Date, count = 1): GiveAwayLog {
+  return { id, at: at.getTime(), count };
+}
+
+function taken(id: string, at: Date, count = 1): TakenLog {
+  return { id, at: at.getTime(), count };
+}
+
+function loose(id: string, at: Date, count = 1, cost = 0.5): LoosePurchaseLog {
+  return { id, at: at.getTime(), count, cost };
 }
 
 test("periodRange day is the calendar day of the anchor", () => {
@@ -68,7 +81,7 @@ test("summarizeRange March vs February is calendar-correct (regression for spanM
     log("feb15", new Date(2026, 1, 15, 12)),
     log("mar10", new Date(2026, 2, 10, 12)),
   ];
-  const summary = summarizeRange(logs, [], settings, march.start, march.end, "month");
+  const summary = summarizeRange(logs, [], [], [], [], [], settings, march.start, march.end, "month");
   assert.equal(summary.count, 1);
   assert.equal(summary.prevCount, 1);
 
@@ -85,32 +98,52 @@ test("assignSmokeCosts ignores packs bought after the cigarette (FIFO date guard
     log("early", new Date(2026, 0, 1, 12)),
     log("after", new Date(2026, 0, 21, 12)),
   ];
-  const map = assignSmokeCosts(logs, purchases, 0.5);
+  const map = assignSmokeCosts(logs, purchases, [], [], [], 0.5);
   assert.equal(map.get("early"), 0.5);
   assert.equal(map.get("after"), 2);
-
-  const lots = purchases
-    .slice()
-    .sort((a, b) => a.at - b.at)
-    .map((p) => ({ remaining: p.packs * p.cigsPerPack, per: p.cost / (p.packs * p.cigsPerPack) }));
-  const old = new Map<string, number>();
-  for (const entry of logs.slice().sort((a, b) => a.at - b.at)) {
-    const lot = lots.find((l) => l.remaining > 0);
-    if (lot) {
-      lot.remaining -= 1;
-      old.set(entry.id, lot.per);
-    } else {
-      old.set(entry.id, 0.5);
-    }
-  }
-  assert.equal(old.get("early"), 2, "old FIFO assigned the January 20 pack to a January 1 smoke");
-  assert.notEqual(map.get("early"), old.get("early"));
 });
 
-test("inventoryRemaining is bought cigarettes minus smoked", () => {
+test("assignSmokeCosts uses zero cost for taken cigarettes", () => {
+  const logs = [log("smoke", new Date(2026, 0, 2, 12))];
+  const takenLogs = [taken("t", new Date(2026, 0, 1, 12), 2)];
+  const map = assignSmokeCosts(logs, [], [], takenLogs, [], 0.5);
+  assert.equal(map.get("smoke"), 0);
+});
+
+test("inventoryRemaining adds taken and loose, subtracts smokes and give-aways", () => {
   const logs = [log("a", new Date(2026, 0, 2)), log("b", new Date(2026, 0, 3))];
   const purchases = [pack("p", new Date(2026, 0, 1), 10, 20, 1)];
+  const giveAways = [give("g", new Date(2026, 0, 4), 3)];
+  const takenLogs = [taken("t", new Date(2026, 0, 5), 4)];
+  const looseLogs = [loose("l", new Date(2026, 0, 6), 2, 1)];
   assert.equal(inventoryRemaining(logs, purchases), 18);
+  assert.equal(inventoryRemaining(logs, purchases, giveAways), 15);
+  assert.equal(inventoryRemaining(logs, purchases, giveAways, takenLogs), 19);
+  assert.equal(inventoryRemaining(logs, purchases, giveAways, takenLogs, looseLogs), 21);
   assert.equal(inventoryRemaining(logs, []), -2);
   assert.equal(inventoryRemaining([], []), 0);
+});
+
+test("openPackState treats multi-line purchase as one open pack", () => {
+  const purchases: Purchase[] = [
+    {
+      id: "combo",
+      at: new Date(2026, 0, 1).getTime(),
+      brand: "Combo",
+      lines: [{ packs: 1, cigsPerPack: 20 }, { packs: 1, cigsPerPack: 10 }],
+      cost: 30,
+    },
+  ];
+  const logs = [log("a", new Date(2026, 0, 2))];
+  const state = openPackState(logs, purchases, [], [], [], 20);
+  assert.equal(state.openPackCapacity, 30);
+  assert.equal(state.openPackRemaining, 29);
+  assert.equal(state.remaining, 29);
+});
+
+test("openPackState includes taken cigarettes in remaining", () => {
+  const takenLogs = [taken("t", new Date(2026, 0, 1), 3)];
+  const state = openPackState([], [], [], takenLogs, [], 20);
+  assert.equal(state.remaining, 3);
+  assert.equal(state.openPackRemaining, 3);
 });

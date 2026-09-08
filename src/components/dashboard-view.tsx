@@ -11,7 +11,6 @@ import { ChartTooltip } from "@/components/chart-tooltip";
 import { PeriodToggle } from "@/components/period-toggle";
 import { Card } from "@/components/ui/card";
 import { formatDuration, formatMoney } from "@/lib/format";
-import { SPAN_META, activeSpanSummary } from "@/lib/spans";
 import { deltaPct, periodLabel, periodRange, shiftAnchor, summarizeRange } from "@/lib/stats";
 import { useAshStore } from "@/lib/store";
 import type { Period } from "@/lib/types";
@@ -20,19 +19,30 @@ import { cn } from "@/lib/utils";
 export function DashboardView() {
   const logs = useAshStore((s) => s.logs);
   const purchases = useAshStore((s) => s.purchases);
-  const spans = useAshStore((s) => s.spans);
+  const giveAways = useAshStore((s) => s.giveAways);
+  const taken = useAshStore((s) => s.taken);
+  const loosePurchases = useAshStore((s) => s.loosePurchases);
+  const customContexts = useAshStore((s) => s.customContexts);
   const settings = useAshStore((s) => s.settings);
   const [period, setPeriod] = useState<Period>("week");
   const [anchor, setAnchor] = useState(() => new Date());
 
   const { start, end } = useMemo(() => periodRange(period, anchor), [period, anchor]);
   const summary = useMemo(
-    () => summarizeRange(logs, purchases, settings, start, end, period),
-    [logs, purchases, settings, start, end, period],
-  );
-  const spanSummary = useMemo(
-    () => activeSpanSummary(spans, logs, start, end),
-    [spans, logs, start, end],
+    () =>
+      summarizeRange(
+        logs,
+        purchases,
+        giveAways,
+        taken,
+        loosePurchases,
+        customContexts,
+        settings,
+        start,
+        end,
+        period,
+      ),
+    [logs, purchases, giveAways, taken, loosePurchases, customContexts, settings, start, end, period],
   );
 
   const label = periodLabel(period, start, end);
@@ -98,52 +108,6 @@ export function DashboardView() {
           hint="Packs bought in period"
         />
       </div>
-
-      <Card>
-        <div className="mb-4">
-          <h3 className="text-sm font-medium">No-smoke windows</h3>
-          <p className="text-xs text-muted-foreground">Time spent where you could not light up</p>
-        </div>
-        {spanSummary.length === 0 ? (
-          <p className="text-sm text-muted-foreground">None marked in this stretch.</p>
-        ) : (
-          <ul className="flex flex-col gap-3">
-            {spanSummary.map((row) => {
-              const max = Math.max(...spanSummary.map((x) => x.minutes), 1);
-              const Icon = SPAN_META[row.kind].icon;
-              return (
-                <li key={row.kind}>
-                  <div className="mb-1 flex items-baseline justify-between gap-3 text-sm">
-                    <span className="flex items-center gap-2">
-                      <Icon className="size-3.5 text-muted-foreground" strokeWidth={1.75} />
-                      {row.label}
-                    </span>
-                    <span className="tabular-nums text-muted-foreground">
-                      {formatDuration(row.minutes)}
-                      {row.count > 0 ? ` · ${row.count}` : ""}
-                    </span>
-                  </div>
-                  <div className="h-2 overflow-hidden rounded-full bg-secondary">
-                    <div
-                      className="h-full rounded-full bg-primary transition-[width] duration-200"
-                      style={{ width: `${(row.minutes / max) * 100}%` }}
-                    />
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-        {spanSummary.some((s) => s.smokes > 0) && (
-          <p className="mt-4 text-xs text-muted-foreground">
-            {spanSummary
-              .filter((s) => s.smokes > 0)
-              .map((s) => `${s.smokes} during ${s.label.toLowerCase()}`)
-              .join(" · ")}
-            .
-          </p>
-        )}
-      </Card>
 
       <Card>
         <div className="mb-4">

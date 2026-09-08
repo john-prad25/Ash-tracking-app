@@ -3,9 +3,8 @@ import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis } from "recharts";
 import { ChartTooltip } from "@/components/chart-tooltip";
 import { PeriodToggle } from "@/components/period-toggle";
 import { Card } from "@/components/ui/card";
-import { CONTEXT_BY_ID, GROUP_META } from "@/lib/contexts";
+import { getContextDef, GROUP_META } from "@/lib/contexts";
 import { formatDuration } from "@/lib/format";
-import { activeSpanSummary } from "@/lib/spans";
 import { periodLabel, periodRange, summarizeRange } from "@/lib/stats";
 import { useAshStore } from "@/lib/store";
 import type { Period } from "@/lib/types";
@@ -13,19 +12,30 @@ import type { Period } from "@/lib/types";
 export function PatternsView() {
   const logs = useAshStore((s) => s.logs);
   const purchases = useAshStore((s) => s.purchases);
-  const spans = useAshStore((s) => s.spans);
+  const giveAways = useAshStore((s) => s.giveAways);
+  const taken = useAshStore((s) => s.taken);
+  const loosePurchases = useAshStore((s) => s.loosePurchases);
+  const customContexts = useAshStore((s) => s.customContexts);
   const settings = useAshStore((s) => s.settings);
   const [period, setPeriod] = useState<Period>("month");
   const [anchor] = useState(() => new Date());
 
   const { start, end } = useMemo(() => periodRange(period, anchor), [period, anchor]);
   const summary = useMemo(
-    () => summarizeRange(logs, purchases, settings, start, end, period),
-    [logs, purchases, settings, start, end, period],
-  );
-  const spanSummary = useMemo(
-    () => activeSpanSummary(spans, logs, start, end),
-    [spans, logs, start, end],
+    () =>
+      summarizeRange(
+        logs,
+        purchases,
+        giveAways,
+        taken,
+        loosePurchases,
+        customContexts,
+        settings,
+        start,
+        end,
+        period,
+      ),
+    [logs, purchases, giveAways, taken, loosePurchases, customContexts, settings, start, end, period],
   );
 
   const total = summary.count || 1;
@@ -44,37 +54,6 @@ export function PatternsView() {
       </div>
 
       <PeriodToggle value={period} onChange={setPeriod} />
-
-      {spanSummary.length > 0 && (
-        <Card>
-          <div className="mb-4">
-            <h3 className="text-sm font-medium">No-smoke windows</h3>
-            <p className="text-xs text-muted-foreground">Ranked by time you marked as off-limits</p>
-          </div>
-          <ul className="flex flex-col gap-3">
-            {spanSummary.map((row) => {
-              const max = spanSummary[0]?.minutes || 1;
-              return (
-                <li key={row.kind}>
-                  <div className="mb-1 flex items-baseline justify-between gap-3 text-sm">
-                    <span>{row.label}</span>
-                    <span className="tabular-nums text-muted-foreground">
-                      {formatDuration(row.minutes)}
-                      {row.smokes > 0 ? ` · ${row.smokes} smokes` : ""}
-                    </span>
-                  </div>
-                  <div className="h-1.5 overflow-hidden rounded-full bg-secondary">
-                    <div
-                      className="h-full rounded-full bg-primary"
-                      style={{ width: `${(row.minutes / max) * 100}%` }}
-                    />
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        </Card>
-      )}
 
       <div className="grid grid-cols-3 gap-2">
         {summary.byGroup.map((g) => (
@@ -99,7 +78,7 @@ export function PatternsView() {
           <ul className="flex flex-col gap-3">
             {summary.byContext.map((row) => {
               const max = summary.byContext[0]?.count ?? 1;
-              const def = CONTEXT_BY_ID[row.id];
+              const def = getContextDef(row.id, customContexts);
               const Icon = def.icon;
               return (
                 <li key={row.id}>

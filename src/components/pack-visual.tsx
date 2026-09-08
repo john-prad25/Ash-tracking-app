@@ -2,35 +2,39 @@ import { plural } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 export function PackVisual({
+  openPackRemaining,
+  openPackCapacity,
+  sealedCigarettes,
   remaining,
-  perPack,
 }: {
+  openPackRemaining: number;
+  openPackCapacity: number;
+  sealedCigarettes: number;
   remaining: number;
-  perPack: number;
 }) {
-  const slots = Math.min(Math.max(perPack, 1), 25);
-  const filled = remaining <= 0 ? 0 : Math.min(remaining, slots);
-  const packs = Math.floor(Math.max(remaining, 0) / perPack);
-  const loose = Math.max(remaining, 0) % perPack;
+  const slots = Math.min(Math.max(openPackCapacity, 1), 30);
+  const filled = openPackRemaining <= 0 ? 0 : Math.min(openPackRemaining, slots);
 
   let caption: string;
   if (remaining < 0) {
     caption = `${Math.abs(remaining)} smoked past logged packs`;
   } else if (remaining === 0) {
     caption = "Pack empty — log a purchase";
-  } else if (remaining <= perPack) {
-    caption = `${remaining} left in this pack`;
-  } else if (loose === 0) {
-    caption = `${packs} full ${plural(packs, "pack")} on hand`;
+  } else if (sealedCigarettes > 0) {
+    caption = `${sealedCigarettes} sealed + ${openPackRemaining} in open pack`;
+  } else if (openPackRemaining <= openPackCapacity) {
+    caption = `${openPackRemaining} left in open pack`;
   } else {
-    caption = `${packs} ${plural(packs, "pack")} + ${loose} in the open one`;
+    caption = `${remaining} remaining`;
   }
+
+  const columns = Math.min(slots, 10);
 
   return (
     <div className="flex flex-col gap-3">
       <div
         className="grid gap-1.5"
-        style={{ gridTemplateColumns: `repeat(${Math.min(slots, 10)}, minmax(0, 1fr))` }}
+        style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
       >
         {Array.from({ length: slots }, (_, i) => (
           <span

@@ -1,5 +1,5 @@
 import { setHours, setMinutes, startOfDay, subDays } from "date-fns";
-import type { ContextId, DaySpan, Purchase, SmokeLog } from "./types";
+import type { ContextId, Purchase, SmokeLog } from "./types";
 import { uid } from "./utils";
 
 function mulberry32(seed: number) {
@@ -52,7 +52,6 @@ const BRANDS = ["Marlboro Gold", "Camel Blue", "Lucky Strike", "Parliament"];
 export function createSampleMonth(now = Date.now()): {
   logs: SmokeLog[];
   purchases: Purchase[];
-  spans: DaySpan[];
 } {
   const rand = mulberry32(20260904);
   const logs: SmokeLog[] = [];
@@ -89,75 +88,11 @@ export function createSampleMonth(now = Date.now()): {
       id: uid(),
       at: Math.min(at, now - 60_000),
       brand: BRANDS[i % BRANDS.length] ?? "Cigarettes",
-      packs: 1,
-      cigsPerPack,
+      lines: [{ packs: 1, cigsPerPack }],
       cost,
     });
   }
 
   purchases.sort((a, b) => a.at - b.at);
-
-  const spans: DaySpan[] = [];
-  for (let offset = 34; offset >= 0; offset -= 1) {
-    const day = startOfDay(subDays(now, offset));
-    const weekday = day.getDay();
-    const isWeekend = weekday === 0 || weekday === 6;
-    const prev = startOfDay(subDays(now, offset + 1));
-
-    const sleepStart = stamp(prev, isWeekend ? 23 : 22, 40 + Math.floor(rand() * 25));
-    const sleepEnd = stamp(day, isWeekend ? 8 : 6, 40 + Math.floor(rand() * 35));
-    if (sleepEnd < now - 10 * 60_000) {
-      spans.push({ id: uid(), kind: "sleep", start: sleepStart, end: sleepEnd });
-    }
-
-    const meals: [number, number, number, number][] = isWeekend
-      ? [
-          [9, 10, 9, 45],
-          [13, 5, 13, 50],
-          [19, 20, 20, 5],
-        ]
-      : [
-          [7, 40, 8, 5],
-          [12, 20, 12, 55],
-          [19, 5, 19, 40],
-        ];
-    for (const [sh, sm, eh, em] of meals) {
-      const start = stamp(day, sh, sm + Math.floor(rand() * 8) - 3);
-      const end = stamp(day, eh, em + Math.floor(rand() * 8) - 3);
-      if (end <= start || end > now - 5 * 60_000) continue;
-      if (rand() > 0.92) continue;
-      spans.push({ id: uid(), kind: "meal", start, end });
-    }
-
-    if (!isWeekend && rand() < 0.7) {
-      const start = stamp(day, 10, 40 + Math.floor(rand() * 30));
-      const end = start + (35 + Math.floor(rand() * 40)) * 60_000;
-      if (end < now - 5 * 60_000) {
-        spans.push({ id: uid(), kind: "meeting", start, end });
-      }
-    }
-    if (!isWeekend) {
-      const c1s = stamp(day, 8, 35 + Math.floor(rand() * 12));
-      const c1e = stamp(day, 9, 10 + Math.floor(rand() * 15));
-      if (c1e < now - 5 * 60_000) {
-        spans.push({ id: uid(), kind: "commute", start: c1s, end: c1e });
-      }
-      const c2s = stamp(day, 17, 35 + Math.floor(rand() * 15));
-      const c2e = stamp(day, 18, 15 + Math.floor(rand() * 20));
-      if (c2e < now - 5 * 60_000) {
-        spans.push({ id: uid(), kind: "commute", start: c2s, end: c2e });
-      }
-    }
-
-    if (isWeekend && rand() < 0.4) {
-      const start = stamp(day, 10, 5 + Math.floor(rand() * 20));
-      const end = start + (50 + Math.floor(rand() * 25)) * 60_000;
-      if (end < now - 5 * 60_000) {
-        spans.push({ id: uid(), kind: "gym", start, end });
-      }
-    }
-  }
-
-  spans.sort((a, b) => a.start - b.start);
-  return { logs, purchases, spans };
+  return { logs, purchases };
 }

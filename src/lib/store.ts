@@ -1,8 +1,18 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
+import { normalizePurchase, perCigarettePrice } from "./purchases";
 import { createSampleMonth } from "./seed";
-import { toggleSpanKind, undoSpanSwitchState, undoSpanToggleState } from "./spans";
-import type { ContextId, DaySpan, Purchase, PurchaseInput, Settings, SmokeLog, SpanKind } from "./types";
+import type {
+  ContextGroup,
+  CustomContext,
+  GiveAwayLog,
+  LoosePurchaseLog,
+  Purchase,
+  PurchaseInput,
+  Settings,
+  SmokeLog,
+  TakenLog,
+} from "./types";
 import { uid } from "./utils";
 
 const DEFAULT_SETTINGS: Settings = {
@@ -15,18 +25,28 @@ const DEFAULT_SETTINGS: Settings = {
 export interface AshState {
   logs: SmokeLog[];
   purchases: Purchase[];
-  spans: DaySpan[];
+  giveAways: GiveAwayLog[];
+  taken: TakenLog[];
+  loosePurchases: LoosePurchaseLog[];
+  customContexts: CustomContext[];
   settings: Settings;
   initialized: boolean;
   isSample: boolean;
   ensureSeeded: () => void;
-  addSmoke: (context: ContextId) => SmokeLog;
+  addSmoke: (context: string) => SmokeLog;
   restoreSmoke: (log: SmokeLog) => void;
   undoSmoke: (id: string) => void;
-  toggleSpan: (kind: SpanKind) => { action: "start" | "end"; span: DaySpan };
-  undoSpanToggle: (id: string) => void;
-  undoSpanSwitch: (startedId: string, previousId: string) => void;
-  deleteSpan: (id: string) => void;
+  addGiveAway: (count: number) => GiveAwayLog;
+  undoGiveAway: (id: string) => void;
+  restoreGiveAway: (entry: GiveAwayLog) => void;
+  addTaken: (count: number) => TakenLog;
+  undoTaken: (id: string) => void;
+  restoreTaken: (entry: TakenLog) => void;
+  addLoosePurchase: (count: number) => LoosePurchaseLog;
+  undoLoosePurchase: (id: string) => void;
+  restoreLoosePurchase: (entry: LoosePurchaseLog) => void;
+  addCustomContext: (group: ContextGroup, label: string) => CustomContext;
+  removeCustomContext: (id: string) => void;
   addPurchase: (input: PurchaseInput) => Purchase;
   deletePurchase: (id: string) => void;
   updateSettings: (patch: Partial<Settings>) => void;
@@ -41,27 +61,28 @@ const emptyStorage = {
   removeItem: () => {},
 };
 
+function normalizePurchases(raw: Purchase[]): Purchase[] {
+  return raw.map((p) => normalizePurchase(p as Purchase & { packs?: number; cigsPerPack?: number }));
+}
+
 export const useAshStore = create<AshState>()(
   persist(
     (set, get) => ({
       logs: [],
       purchases: [],
-      spans: [],
+      giveAways: [],
+      taken: [],
+      loosePurchases: [],
+      customContexts: [],
       settings: DEFAULT_SETTINGS,
       initialized: false,
       isSample: false,
       ensureSeeded: () => {
-        if (get().initialized) {
-          if (get().isSample && get().spans.length === 0) {
-            set({ spans: createSampleMonth().spans });
-          }
-          return;
-        }
+        if (get().initialized) return;
         const sample = createSampleMonth();
         set({
           logs: sample.logs,
           purchases: sample.purchases,
-          spans: sample.spans,
           initialized: true,
           isSample: true,
         });
@@ -77,19 +98,60 @@ export const useAshStore = create<AshState>()(
       undoSmoke: (id) => {
         set((s) => ({ logs: s.logs.filter((l) => l.id !== id) }));
       },
-      toggleSpan: (kind) => {
-        const result = toggleSpanKind(get().spans, kind, Date.now(), uid());
-        set({ spans: result.spans });
-        return { action: result.action, span: result.span };
+      addGiveAway: (count) => {
+        const entry: GiveAwayLog = { id: uid(), at: Date.now(), count: Math.max(1, count) };
+        set((s) => ({ giveAways: [...s.giveAways, entry] }));
+        return entry;
       },
-      undoSpanToggle: (id) => {
-        set((s) => ({ spans: undoSpanToggleState(s.spans, id) }));
+      undoGiveAway: (id) => {
+        set((s) => ({ giveAways: s.giveAways.filter((g) => g.id !== id) }));
       },
-      undoSpanSwitch: (startedId, previousId) => {
-        set((s) => ({ spans: undoSpanSwitchState(s.spans, startedId, previousId) }));
+      restoreGiveAway: (entry) => {
+        set((s) =>
+          s.giveAways.some((g) => g.id === entry.id) ? s : { giveAways: [...s.giveAways, entry] },
+        );
       },
-      deleteSpan: (id) => {
-        set((s) => ({ spans: s.spans.filter((x) => x.id !== id) }));
+      addTaken: (count) => {
+        const entry: TakenLog = { id: uid(), at: Date.now(), count: Math.max(1, count) };
+        set((s) => ({ taken: [...s.taken, entry] }));
+        return entry;
+      },
+      undoTaken: (id) => {
+        set((s) => ({ taken: s.taken.filter((t) => t.id !== id) }));
+      },
+      restoreTaken: (entry) => {
+        set((s) => (s.taken.some((t) => t.id === entry.id) ? s : { taken: [...s.taken, entry] }));
+      },
+      addLoosePurchase: (count) => {
+        const n = Math.max(1, count);
+        const per = perCigarettePrice(get().settings);
+        const entry: LoosePurchaseLog = {
+          id: uid(),
+          at: Date.now(),
+          count: n,
+          cost: Math.round(per * n * 100) / 100,
+        };
+        set((s) => ({ loosePurchases: [...s.loosePurchases, entry] }));
+        return entry;
+      },
+      undoLoosePurchase: (id) => {
+        set((s) => ({ loosePurchases: s.loosePurchases.filter((l) => l.id !== id) }));
+      },
+      restoreLoosePurchase: (entry) => {
+        set((s) =>
+          s.loosePurchases.some((l) => l.id === entry.id)
+            ? s
+            : { loosePurchases: [...s.loosePurchases, entry] },
+        );
+      },
+      addCustomContext: (group, label) => {
+        const trimmed = label.trim();
+        const custom: CustomContext = { id: `custom_${uid()}`, label: trimmed, group };
+        set((s) => ({ customContexts: [...s.customContexts, custom] }));
+        return custom;
+      },
+      removeCustomContext: (id) => {
+        set((s) => ({ customContexts: s.customContexts.filter((c) => c.id !== id) }));
       },
       addPurchase: (input) => {
         const purchase: Purchase = { id: uid(), ...input };
@@ -107,7 +169,10 @@ export const useAshStore = create<AshState>()(
         set({
           logs: [],
           purchases: [],
-          spans: [],
+          giveAways: [],
+          taken: [],
+          loosePurchases: [],
+          customContexts: [],
           initialized: true,
           isSample: false,
         }),
@@ -116,7 +181,6 @@ export const useAshStore = create<AshState>()(
         set({
           logs: sample.logs,
           purchases: sample.purchases,
-          spans: sample.spans,
           initialized: true,
           isSample: true,
         });
@@ -129,17 +193,26 @@ export const useAshStore = create<AshState>()(
       ),
       skipHydration: true,
       merge: (persisted, current) => {
-        const p = (persisted ?? {}) as Partial<AshState>;
+        const p = (persisted ?? {}) as Partial<AshState> & {
+          purchases?: (Purchase & { packs?: number; cigsPerPack?: number })[];
+        };
         return {
           ...current,
           ...p,
-          spans: Array.isArray(p.spans) ? p.spans : [],
+          purchases: Array.isArray(p.purchases) ? normalizePurchases(p.purchases) : [],
+          giveAways: Array.isArray(p.giveAways) ? p.giveAways : [],
+          taken: Array.isArray(p.taken) ? p.taken : [],
+          loosePurchases: Array.isArray(p.loosePurchases) ? p.loosePurchases : [],
+          customContexts: Array.isArray(p.customContexts) ? p.customContexts : [],
         };
       },
       partialize: (s) => ({
         logs: s.logs,
         purchases: s.purchases,
-        spans: s.spans,
+        giveAways: s.giveAways,
+        taken: s.taken,
+        loosePurchases: s.loosePurchases,
+        customContexts: s.customContexts,
         settings: s.settings,
         initialized: s.initialized,
         isSample: s.isSample,
