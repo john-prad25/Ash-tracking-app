@@ -8,4 +8,4 @@ npm install
 npx playwright install chromium
 
 # startup.sh and browser-smoke expect /workspace to be the app root.
-ln -sfn "$ROOT" /workspace
+sudo ln -sfn "$ROOT" /workspace
