@@ -602,7 +602,8 @@ function AddCigarettesDialog() {
                 autoFocus
               />
               <p className="text-xs text-muted-foreground">
-                {formatMoney(looseCost, settings.currency)} at {formatMoney(perCig, settings.currency)} each
+                {plural(n, "cigarette")} at {formatMoney(perCig, settings.currency)} each ·{" "}
+                {formatMoney(looseCost, settings.currency)} total
               </p>
             </div>
             <DialogFooter className="gap-2 sm:justify-between">
