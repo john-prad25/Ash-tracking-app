@@ -1,6 +1,6 @@
 # Ash
 
-Private smoking and no-smoke tracker. Logs stay on the device. Nothing is sent to a server.
+Private smoking tracker. Logs stay on the device. Nothing is sent to a server.
 
 ## What’s in this repo
 
@@ -36,7 +36,7 @@ npm run build:android
 7. Locate `app-debug.apk` under `ash-android/app/build/outputs/apk/debug/`.
 8. Copy the APK to the phone, allow install from unknown sources for that transfer app, open the APK, and install.
 
-The phone app is fully offline. Packs, cigarettes, and no-smoke windows never leave the device. Android backup of WebView storage is turned off.
+The phone app is fully offline. Packs, cigarettes, and logs never leave the device. Android backup of WebView storage is turned off.
 
 ## Run the web app (optional)
 
@@ -49,4 +49,4 @@ Then open the URL Vite prints in the terminal.
 
 ## Privacy
 
-Ash stores packs, cigarettes, and no-smoke spans in the browser (or on the phone). There is no account, no cloud sync, and no INTERNET permission on the APK.
+Ash stores packs, cigarettes, and logs in the browser (or on the phone). There is no account, no cloud sync, and no INTERNET permission on the APK.

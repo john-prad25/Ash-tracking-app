@@ -63,7 +63,7 @@ npm run build:android`}
               <li>Open the APK and install. Play Protect may ask once; that is expected.</li>
             </ol>
             <p className="mt-3 text-sm text-muted-foreground">
-              The app is fully offline. Packs, cigarettes, and no-smoke windows never leave the
+              The app is fully offline. Packs, cigarettes, and logs never leave the
               device.
             </p>
           </div>

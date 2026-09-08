@@ -1,19 +1,28 @@
 import { endOfDay, isSameDay, startOfDay } from "date-fns";
-import { Trash2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { Gift, Plus, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
-import { NoSmokeTracker } from "@/components/no-smoke-tracker";
 import { PackVisual } from "@/components/pack-visual";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { CONTEXTS, CONTEXT_BY_ID, GROUP_META, GROUP_ORDER } from "@/lib/contexts";
-import { formatDuration, formatRelativeAgo, formatTime, plural } from "@/lib/format";
-import { SPAN_META, spansCovering } from "@/lib/spans";
-import { inRange, inventoryRemaining } from "@/lib/stats";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { CONTEXTS, getContextDef, GROUP_META, GROUP_ORDER } from "@/lib/contexts";
+import { formatRelativeAgo, formatTime, plural } from "@/lib/format";
+import { inRange, inventoryRemaining, openPackState } from "@/lib/stats";
 import { useAshStore } from "@/lib/store";
-import type { ContextGroup, ContextId, SpanKind } from "@/lib/types";
+import type { ContextGroup, CustomContext, GiveAwayLog, SmokeLog } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-function useNow(ms = 30_000) {
+function useNow(ms = 60_000) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), ms);
@@ -22,47 +31,55 @@ function useNow(ms = 30_000) {
   return now;
 }
 
+type TodayEntry =
+  | { kind: "smoke"; entry: SmokeLog }
+  | { kind: "give"; entry: GiveAwayLog };
+
 export function TodayView() {
   const logs = useAshStore((s) => s.logs);
   const purchases = useAshStore((s) => s.purchases);
-  const spans = useAshStore((s) => s.spans);
+  const giveAways = useAshStore((s) => s.giveAways);
+  const customContexts = useAshStore((s) => s.customContexts);
   const settings = useAshStore((s) => s.settings);
   const addSmoke = useAshStore((s) => s.addSmoke);
   const undoSmoke = useAshStore((s) => s.undoSmoke);
   const restoreSmoke = useAshStore((s) => s.restoreSmoke);
-  const toggleSpan = useAshStore((s) => s.toggleSpan);
-  const undoSpanToggle = useAshStore((s) => s.undoSpanToggle);
-  const deleteSpan = useAshStore((s) => s.deleteSpan);
-  const anyOpen = spans.some((s) => s.end === null);
-  const clockNow = useNow(anyOpen ? 1_000 : 60_000);
-  const minuteNow = Math.floor(clockNow / 60_000) * 60_000;
+  const addGiveAway = useAshStore((s) => s.addGiveAway);
+  const undoGiveAway = useAshStore((s) => s.undoGiveAway);
+  const restoreGiveAway = useAshStore((s) => s.restoreGiveAway);
+  const addCustomContext = useAshStore((s) => s.addCustomContext);
+  const removeCustomContext = useAshStore((s) => s.removeCustomContext);
+  const minuteNow = useNow();
 
-  const todayLogs = useMemo(() => {
+  const todayEntries = useMemo(() => {
     const start = startOfDay(minuteNow);
     const end = endOfDay(minuteNow);
-    return logs
-      .filter((l) => inRange(l.at, start, end))
-      .slice()
-      .sort((a, b) => b.at - a.at);
-  }, [logs, minuteNow]);
+    const items: TodayEntry[] = [
+      ...logs
+        .filter((l) => inRange(l.at, start, end))
+        .map((entry) => ({ kind: "smoke" as const, entry })),
+      ...giveAways
+        .filter((g) => inRange(g.at, start, end))
+        .map((entry) => ({ kind: "give" as const, entry })),
+    ];
+    return items.sort((a, b) => b.entry.at - a.entry.at);
+  }, [logs, giveAways, minuteNow]);
+
+  const todaySmokes = todayEntries.filter((e) => e.kind === "smoke");
 
   const last = useMemo(
     () => logs.slice().sort((a, b) => b.at - a.at)[0],
     [logs],
   );
 
-  const remaining = inventoryRemaining(logs, purchases);
-  const minutesToday = todayLogs.length * settings.minutesPerCig;
+  const remaining = inventoryRemaining(logs, purchases, giveAways);
+  const pack = openPackState(logs, purchases, giveAways, settings.cigsPerPack);
+  const minutesToday = todaySmokes.length * settings.minutesPerCig;
 
-  function log(context: ContextId) {
+  function log(context: string) {
     const entry = addSmoke(context);
-    const def = CONTEXT_BY_ID[context];
-    const during = spansCovering(useAshStore.getState().spans, entry.at);
-    const extra =
-      during.length > 0
-        ? ` during ${during.map((s) => SPAN_META[s.kind].label.toLowerCase()).join(", ")}`
-        : "";
-    toast(`Logged ${def.label.toLowerCase()}${extra}`, {
+    const def = getContextDef(context, customContexts);
+    toast(`Logged ${def.label.toLowerCase()}`, {
       action: {
         label: "Undo",
         onClick: () => undoSmoke(entry.id),
@@ -70,7 +87,7 @@ export function TodayView() {
     });
   }
 
-  function removeLog(entry: (typeof todayLogs)[number]) {
+  function removeSmoke(entry: SmokeLog) {
     undoSmoke(entry.id);
     toast("Removed from today’s log", {
       action: {
@@ -80,19 +97,14 @@ export function TodayView() {
     });
   }
 
-  function onToggle(kind: SpanKind) {
-    const { action, span } = toggleSpan(kind);
-    const meta = SPAN_META[kind];
-    const minutes = Math.max(1, Math.round(((span.end ?? Date.now()) - span.start) / 60_000));
-    toast(
-      action === "start" ? `${meta.label} started` : `${meta.label} ended · ${formatDuration(minutes)}`,
-      {
-        action: {
-          label: "Undo",
-          onClick: () => undoSpanToggle(span.id),
-        },
+  function removeGiveAway(entry: GiveAwayLog) {
+    undoGiveAway(entry.id);
+    toast("Removed from today’s log", {
+      action: {
+        label: "Undo",
+        onClick: () => restoreGiveAway(entry),
       },
-    );
+    });
   }
 
   const remainingLabel =
@@ -104,10 +116,10 @@ export function TodayView() {
         <Card className="col-span-2 sm:col-span-1">
           <p className="text-xs font-medium text-muted-foreground">Today</p>
           <p className="mt-2 font-display text-5xl leading-none tracking-tight tabular-nums">
-            {todayLogs.length}
+            {todaySmokes.length}
           </p>
           <p className="mt-2 text-sm text-muted-foreground">
-            {plural(todayLogs.length, "cigarette")} · {minutesToday}m
+            {plural(todaySmokes.length, "cigarette")} · {minutesToday}m
           </p>
         </Card>
         <Card className="col-span-2 sm:col-span-1">
@@ -116,18 +128,10 @@ export function TodayView() {
             {last ? formatRelativeAgo(last.at, minuteNow) : "—"}
           </p>
           <p className="mt-2 text-sm text-muted-foreground">
-            {last ? CONTEXT_BY_ID[last.context].label : "Nothing logged yet"}
+            {last ? getContextDef(last.context, customContexts).label : "Nothing logged yet"}
           </p>
         </Card>
       </section>
-
-      <NoSmokeTracker
-        spans={spans}
-        logs={logs}
-        now={clockNow}
-        onToggle={onToggle}
-        onDelete={(id) => deleteSpan(id)}
-      />
 
       <section className="stagger-in" style={{ animationDelay: "80ms" }}>
         <div className="mb-3">
@@ -136,7 +140,14 @@ export function TodayView() {
         </div>
         <div className="flex flex-col gap-4">
           {GROUP_ORDER.map((group) => (
-            <ContextGroupBlock key={group} group={group} onLog={log} />
+            <ContextGroupBlock
+              key={group}
+              group={group}
+              customContexts={customContexts}
+              onLog={log}
+              onAddCustom={(label) => addCustomContext(group, label)}
+              onRemoveCustom={removeCustomContext}
+            />
           ))}
         </div>
       </section>
@@ -146,21 +157,59 @@ export function TodayView() {
           <h2 className="text-sm font-medium">Open pack</h2>
           <p className="text-xs tabular-nums text-muted-foreground">{remainingLabel}</p>
         </div>
-        <PackVisual remaining={remaining} perPack={settings.cigsPerPack} />
+        <PackVisual
+          openPackRemaining={pack.openPackRemaining}
+          openPackCapacity={pack.openPackCapacity}
+          sealedCigarettes={pack.sealedCigarettes}
+          remaining={pack.remaining}
+        />
+        <div className="mt-4">
+          <GiveAwayDialog />
+        </div>
       </Card>
 
       <section className="stagger-in pb-4" style={{ animationDelay: "160ms" }}>
         <h2 className="mb-3 text-sm font-medium">Today’s log</h2>
-        {todayLogs.length === 0 ? (
+        {todayEntries.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             Empty so far. The first tap starts the day.
           </p>
         ) : (
           <ul className="flex flex-col gap-1">
-            {todayLogs.map((logEntry) => {
-              const def = CONTEXT_BY_ID[logEntry.context];
+            {todayEntries.map((item) => {
+              if (item.kind === "give") {
+                const entry = item.entry;
+                return (
+                  <li
+                    key={entry.id}
+                    className="flex items-center gap-3 rounded-xl px-2 py-1.5 hover:bg-secondary"
+                  >
+                    <span className="flex size-9 items-center justify-center rounded-lg bg-secondary text-muted-foreground">
+                      <Gift className="size-4" strokeWidth={1.75} />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm">Given away</p>
+                      <p className="text-xs text-muted-foreground tabular-nums">
+                        {plural(entry.count, "cigarette")} ·{" "}
+                        {isSameDay(entry.at, minuteNow)
+                          ? formatTime(entry.at)
+                          : formatRelativeAgo(entry.at, minuteNow)}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      className="relative size-11 text-muted-foreground hover:text-foreground"
+                      onClick={() => removeGiveAway(entry)}
+                      aria-label="Remove"
+                    >
+                      <Trash2 className="mx-auto size-4" />
+                    </button>
+                  </li>
+                );
+              }
+              const logEntry = item.entry;
+              const def = getContextDef(logEntry.context, customContexts);
               const Icon = def.icon;
-              const during = spansCovering(spans, logEntry.at, minuteNow);
               return (
                 <li
                   key={logEntry.id}
@@ -175,15 +224,12 @@ export function TodayView() {
                       {isSameDay(logEntry.at, minuteNow)
                         ? formatTime(logEntry.at)
                         : formatRelativeAgo(logEntry.at, minuteNow)}
-                      {during.length > 0
-                        ? ` · during ${during.map((s) => SPAN_META[s.kind].label.toLowerCase()).join(", ")}`
-                        : ""}
                     </p>
                   </div>
                   <button
                     type="button"
                     className="relative size-11 text-muted-foreground hover:text-foreground"
-                    onClick={() => removeLog(logEntry)}
+                    onClick={() => removeSmoke(logEntry)}
                     aria-label="Remove"
                   >
                     <Trash2 className="mx-auto size-4" />
@@ -200,13 +246,32 @@ export function TodayView() {
 
 function ContextGroupBlock({
   group,
+  customContexts,
   onLog,
+  onAddCustom,
+  onRemoveCustom,
 }: {
   group: ContextGroup;
-  onLog: (id: ContextId) => void;
+  customContexts: CustomContext[];
+  onLog: (id: string) => void;
+  onAddCustom: (label: string) => void;
+  onRemoveCustom: (id: string) => void;
 }) {
   const meta = GROUP_META[group];
-  const items = CONTEXTS.filter((c) => c.group === group);
+  const builtIn = CONTEXTS.filter((c) => c.group === group);
+  const custom = customContexts.filter((c) => c.group === group);
+  const [adding, setAdding] = useState(false);
+  const [label, setLabel] = useState("");
+
+  function submitCustom(e: FormEvent) {
+    e.preventDefault();
+    const trimmed = label.trim();
+    if (!trimmed) return;
+    onAddCustom(trimmed);
+    setLabel("");
+    setAdding(false);
+  }
+
   return (
     <div>
       <div className="mb-2 flex items-baseline justify-between">
@@ -216,7 +281,7 @@ function ContextGroupBlock({
         <p className="text-xs text-muted-foreground">{meta.hint}</p>
       </div>
       <div className="grid grid-cols-2 gap-2">
-        {items.map((item) => {
+        {builtIn.map((item) => {
           const Icon = item.icon;
           return (
             <button
@@ -234,7 +299,120 @@ function ContextGroupBlock({
             </button>
           );
         })}
+        {custom.map((item) => (
+          <div key={item.id} className="relative">
+            <button
+              type="button"
+              onClick={() => onLog(item.id)}
+              className={cn(
+                "press-scale flex min-h-11 w-full items-center gap-2.5 rounded-xl bg-card px-3 py-2.5 text-left shadow-[var(--shadow-border)] transition-[box-shadow,background-color] duration-150",
+                "hover:shadow-[var(--shadow-border-hover)] hover:bg-accent",
+              )}
+              aria-label={item.label}
+            >
+              <span className="text-sm leading-tight">{item.label}</span>
+            </button>
+            <button
+              type="button"
+              className="absolute -top-1 -right-1 flex size-5 items-center justify-center rounded-full bg-secondary text-[10px] text-muted-foreground hover:text-foreground"
+              onClick={() => onRemoveCustom(item.id)}
+              aria-label={`Remove ${item.label}`}
+            >
+              ×
+            </button>
+          </div>
+        ))}
+        <button
+          type="button"
+          onClick={() => setAdding(true)}
+          className={cn(
+            "press-scale flex min-h-11 items-center justify-center gap-1.5 rounded-xl border border-dashed border-border bg-transparent px-3 py-2.5 text-muted-foreground transition-colors duration-150",
+            "hover:bg-accent hover:text-foreground",
+          )}
+        >
+          <Plus className="size-4" />
+          <span className="text-sm">Add</span>
+        </button>
       </div>
+      <Dialog open={adding} onOpenChange={setAdding}>
+        <DialogContent>
+          <form onSubmit={submitCustom} className="grid gap-4">
+            <DialogHeader>
+              <DialogTitle>Add option</DialogTitle>
+              <DialogDescription>
+                A custom moment under {meta.label.toLowerCase()}.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-1.5">
+              <Label htmlFor={`custom-${group}`}>Label</Label>
+              <Input
+                id={`custom-${group}`}
+                value={label}
+                onChange={(e) => setLabel(e.target.value)}
+                placeholder="e.g. After gym"
+                autoFocus
+              />
+            </div>
+            <DialogFooter>
+              <Button type="submit" disabled={!label.trim()}>Save</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
+  );
+}
+
+function GiveAwayDialog() {
+  const addGiveAway = useAshStore((s) => s.addGiveAway);
+  const undoGiveAway = useAshStore((s) => s.undoGiveAway);
+  const [open, setOpen] = useState(false);
+  const [count, setCount] = useState("1");
+
+  function submit(e: FormEvent) {
+    e.preventDefault();
+    const n = Math.max(1, Number(count) || 1);
+    const entry = addGiveAway(n);
+    toast(`Logged ${plural(n, "cigarette")} given away`, {
+      action: {
+        label: "Undo",
+        onClick: () => undoGiveAway(entry.id),
+      },
+    });
+    setCount("1");
+    setOpen(false);
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <Button type="button" variant="outline" size="sm" onClick={() => setOpen(true)}>
+        <Gift className="size-4" />
+        Given away
+      </Button>
+      <DialogContent>
+        <form onSubmit={submit} className="grid gap-4">
+          <DialogHeader>
+            <DialogTitle>Given to someone</DialogTitle>
+            <DialogDescription>
+              Reduce the open pack count when you hand cigarettes to someone else.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-1.5">
+            <Label htmlFor="give-count">Cigarettes</Label>
+            <Input
+              id="give-count"
+              type="number"
+              min={1}
+              inputMode="numeric"
+              value={count}
+              onChange={(e) => setCount(e.target.value)}
+            />
+          </div>
+          <DialogFooter>
+            <Button type="submit">Log</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
