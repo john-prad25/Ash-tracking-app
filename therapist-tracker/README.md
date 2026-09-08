@@ -4,15 +4,36 @@ A local-first prototype for narrative therapy client and session tracking. Built
 
 ## Quick start (Mac)
 
+**Important:** `http://127.0.0.1:5173` only works after you start the app on your Mac. It does not run automatically.
+
+### Option A — double-click (easiest)
+
+1. Make sure you have the code (branch `cursor/therapist-tracker-prototype-0ede` or merged PR #3).
+2. In Finder, open the `therapist-tracker` folder.
+3. Double-click **`Start Session Desk.command`**.
+4. If macOS blocks it: right-click → **Open** → **Open** again.
+
+### Option B — terminal
+
 ```bash
 cd therapist-tracker
 npm install
 npm run dev
 ```
 
-Open the URL shown in the terminal (usually `http://127.0.0.1:5173`) in **Chrome** or **Safari**.
+Open **http://127.0.0.1:5173** in Chrome or Safari (the start script can open it for you).
 
 > **Voice transcription** uses the browser’s built-in Web Speech API. It works best in Chrome or Safari on macOS with microphone permission granted.
+
+## Troubleshooting
+
+| Problem | Fix |
+| --- | --- |
+| **Page not found / can't connect** | The dev server isn't running. Run `npm run dev` inside `therapist-tracker` (not the repo root). |
+| **`therapist-tracker` folder missing** | Pull the branch: `git fetch origin cursor/therapist-tracker-prototype-0ede && git checkout cursor/therapist-tracker-prototype-0ede` |
+| **Wrong app loads (Ash tracker)** | The root app runs on port **8080**. Session Desk runs on **5173** from inside `therapist-tracker/`. |
+| **Port 5173 already in use** | Stop the other process, or run `PORT=5174 npm run dev` and open that port instead. |
+| **Blank page after opening** | Hard-refresh (Cmd+Shift+R) or try Chrome instead of Safari. |
 
 ## What's included
 
