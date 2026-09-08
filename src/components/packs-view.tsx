@@ -17,7 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { formatMoney, plural } from "@/lib/format";
 import { lineCost, purchaseLinesCost, purchaseTotalCigs, totalPurchasedCigs } from "@/lib/purchases";
-import { costPerCigarette, inventoryRemaining } from "@/lib/stats";
+import { costPerCigarette, inventoryRemaining, totalLooseSpend } from "@/lib/stats";
 import { useAshStore } from "@/lib/store";
 import type { PurchaseLine } from "@/lib/types";
 
@@ -25,6 +25,8 @@ export function PacksView() {
   const purchases = useAshStore((s) => s.purchases);
   const logs = useAshStore((s) => s.logs);
   const giveAways = useAshStore((s) => s.giveAways);
+  const taken = useAshStore((s) => s.taken);
+  const loosePurchases = useAshStore((s) => s.loosePurchases);
   const settings = useAshStore((s) => s.settings);
   const deletePurchase = useAshStore((s) => s.deletePurchase);
 
@@ -33,12 +35,13 @@ export function PacksView() {
     [purchases],
   );
 
-  const remaining = inventoryRemaining(logs, purchases, giveAways);
+  const remaining = inventoryRemaining(logs, purchases, giveAways, taken, loosePurchases);
   const perCig = costPerCigarette(
     purchases,
+    loosePurchases,
     settings.cigsPerPack > 0 ? settings.defaultPackCost / settings.cigsPerPack : 0,
   );
-  const totalSpent = purchases.reduce((s, p) => s + p.cost, 0);
+  const totalSpent = purchases.reduce((s, p) => s + p.cost, 0) + totalLooseSpend(loosePurchases);
   const totalCigs = totalPurchasedCigs(purchases);
 
   return (

@@ -13,6 +13,8 @@ export function PatternsView() {
   const logs = useAshStore((s) => s.logs);
   const purchases = useAshStore((s) => s.purchases);
   const giveAways = useAshStore((s) => s.giveAways);
+  const taken = useAshStore((s) => s.taken);
+  const loosePurchases = useAshStore((s) => s.loosePurchases);
   const customContexts = useAshStore((s) => s.customContexts);
   const settings = useAshStore((s) => s.settings);
   const [period, setPeriod] = useState<Period>("month");
@@ -20,8 +22,20 @@ export function PatternsView() {
 
   const { start, end } = useMemo(() => periodRange(period, anchor), [period, anchor]);
   const summary = useMemo(
-    () => summarizeRange(logs, purchases, giveAways, customContexts, settings, start, end, period),
-    [logs, purchases, giveAways, customContexts, settings, start, end, period],
+    () =>
+      summarizeRange(
+        logs,
+        purchases,
+        giveAways,
+        taken,
+        loosePurchases,
+        customContexts,
+        settings,
+        start,
+        end,
+        period,
+      ),
+    [logs, purchases, giveAways, taken, loosePurchases, customContexts, settings, start, end, period],
   );
 
   const total = summary.count || 1;

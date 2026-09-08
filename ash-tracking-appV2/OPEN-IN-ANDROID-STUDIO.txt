@@ -1,17 +1,18 @@
-Ash v2 — Android Studio project (ready to open)
+Ash — open this folder in Android Studio
 
-This folder is a standalone Android build. Open THIS folder in Android Studio
-(the one that contains settings.gradle.kts).
+From the repo root, after any change to src/:
 
-Steps:
+  npm install
+  npm run build:android
 
-1. Android Studio → File → Open → select ash-tracking-appV2
-2. Let Gradle sync finish (first time can take several minutes)
-3. Build → Build Bundle(s) / APK(s) → Build APK(s)
-4. APK: app/build/outputs/apk/debug/app-debug.apk
-5. Copy to phone, allow install from unknown sources, install
+Then:
 
-The web app (Ash v2) is already bundled in app/src/main/assets/.
-No npm build step needed unless you change the web source in the main repo.
+1. Android Studio → File → Open → this folder (the one that contains settings.gradle.kts).
+2. Let Gradle sync finish. First time can take several minutes.
+3. Build → Build Bundle(s) / APK(s) → Build APK(s).
+4. Copy app-debug.apk from app/build/outputs/apk/debug/ to the phone.
+5. Allow install from unknown sources, open the APK, install.
 
-Fully offline. Logs stay on the phone.
+Skip build:android and the APK will ship a stale copy of the app.
+
+The app is fully offline. Logs stay on the phone.

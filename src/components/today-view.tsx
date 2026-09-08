@@ -1,5 +1,5 @@
 import { endOfDay, isSameDay, startOfDay } from "date-fns";
-import { Gift, Plus, Trash2 } from "lucide-react";
+import { Gift, HandCoins, Minus, Plus, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { PackVisual } from "@/components/pack-visual";
@@ -16,10 +16,17 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CONTEXTS, getContextDef, GROUP_META, GROUP_ORDER } from "@/lib/contexts";
-import { formatRelativeAgo, formatTime, plural } from "@/lib/format";
+import { formatMoney, formatRelativeAgo, formatTime, plural } from "@/lib/format";
 import { inRange, inventoryRemaining, openPackState } from "@/lib/stats";
 import { useAshStore } from "@/lib/store";
-import type { ContextGroup, CustomContext, GiveAwayLog, SmokeLog } from "@/lib/types";
+import type {
+  ContextGroup,
+  CustomContext,
+  GiveAwayLog,
+  LoosePurchaseLog,
+  SmokeLog,
+  TakenLog,
+} from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 function useNow(ms = 60_000) {
@@ -33,12 +40,16 @@ function useNow(ms = 60_000) {
 
 type TodayEntry =
   | { kind: "smoke"; entry: SmokeLog }
-  | { kind: "give"; entry: GiveAwayLog };
+  | { kind: "give"; entry: GiveAwayLog }
+  | { kind: "taken"; entry: TakenLog }
+  | { kind: "loose"; entry: LoosePurchaseLog };
 
 export function TodayView() {
   const logs = useAshStore((s) => s.logs);
   const purchases = useAshStore((s) => s.purchases);
   const giveAways = useAshStore((s) => s.giveAways);
+  const taken = useAshStore((s) => s.taken);
+  const loosePurchases = useAshStore((s) => s.loosePurchases);
   const customContexts = useAshStore((s) => s.customContexts);
   const settings = useAshStore((s) => s.settings);
   const addSmoke = useAshStore((s) => s.addSmoke);
@@ -47,6 +58,12 @@ export function TodayView() {
   const addGiveAway = useAshStore((s) => s.addGiveAway);
   const undoGiveAway = useAshStore((s) => s.undoGiveAway);
   const restoreGiveAway = useAshStore((s) => s.restoreGiveAway);
+  const addTaken = useAshStore((s) => s.addTaken);
+  const undoTaken = useAshStore((s) => s.undoTaken);
+  const restoreTaken = useAshStore((s) => s.restoreTaken);
+  const addLoosePurchase = useAshStore((s) => s.addLoosePurchase);
+  const undoLoosePurchase = useAshStore((s) => s.undoLoosePurchase);
+  const restoreLoosePurchase = useAshStore((s) => s.restoreLoosePurchase);
   const addCustomContext = useAshStore((s) => s.addCustomContext);
   const removeCustomContext = useAshStore((s) => s.removeCustomContext);
   const minuteNow = useNow();
@@ -61,9 +78,15 @@ export function TodayView() {
       ...giveAways
         .filter((g) => inRange(g.at, start, end))
         .map((entry) => ({ kind: "give" as const, entry })),
+      ...taken
+        .filter((t) => inRange(t.at, start, end))
+        .map((entry) => ({ kind: "taken" as const, entry })),
+      ...loosePurchases
+        .filter((l) => inRange(l.at, start, end))
+        .map((entry) => ({ kind: "loose" as const, entry })),
     ];
     return items.sort((a, b) => b.entry.at - a.entry.at);
-  }, [logs, giveAways, minuteNow]);
+  }, [logs, giveAways, taken, loosePurchases, minuteNow]);
 
   const todaySmokes = todayEntries.filter((e) => e.kind === "smoke");
 
@@ -72,8 +95,15 @@ export function TodayView() {
     [logs],
   );
 
-  const remaining = inventoryRemaining(logs, purchases, giveAways);
-  const pack = openPackState(logs, purchases, giveAways, settings.cigsPerPack);
+  const remaining = inventoryRemaining(logs, purchases, giveAways, taken, loosePurchases);
+  const pack = openPackState(
+    logs,
+    purchases,
+    giveAways,
+    taken,
+    loosePurchases,
+    settings.cigsPerPack,
+  );
   const minutesToday = todaySmokes.length * settings.minutesPerCig;
 
   function log(context: string) {
@@ -93,6 +123,26 @@ export function TodayView() {
       action: {
         label: "Undo",
         onClick: () => restoreSmoke(entry),
+      },
+    });
+  }
+
+  function removeTaken(entry: TakenLog) {
+    undoTaken(entry.id);
+    toast("Removed from today’s log", {
+      action: {
+        label: "Undo",
+        onClick: () => restoreTaken(entry),
+      },
+    });
+  }
+
+  function removeLoose(entry: LoosePurchaseLog) {
+    undoLoosePurchase(entry.id);
+    toast("Removed from today’s log", {
+      action: {
+        label: "Undo",
+        onClick: () => restoreLoosePurchase(entry),
       },
     });
   }
@@ -163,7 +213,8 @@ export function TodayView() {
           sealedCigarettes={pack.sealedCigarettes}
           remaining={pack.remaining}
         />
-        <div className="mt-4">
+        <div className="mt-4 flex flex-wrap gap-2">
+          <AddCigarettesDialog />
           <GiveAwayDialog />
         </div>
       </Card>
@@ -200,6 +251,66 @@ export function TodayView() {
                       type="button"
                       className="relative size-11 text-muted-foreground hover:text-foreground"
                       onClick={() => removeGiveAway(entry)}
+                      aria-label="Remove"
+                    >
+                      <Trash2 className="mx-auto size-4" />
+                    </button>
+                  </li>
+                );
+              }
+              if (item.kind === "taken") {
+                const entry = item.entry;
+                return (
+                  <li
+                    key={entry.id}
+                    className="flex items-center gap-3 rounded-xl px-2 py-1.5 hover:bg-secondary"
+                  >
+                    <span className="flex size-9 items-center justify-center rounded-lg bg-secondary text-muted-foreground">
+                      <Plus className="size-4" strokeWidth={1.75} />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm">Taken</p>
+                      <p className="text-xs text-muted-foreground tabular-nums">
+                        {plural(entry.count, "cigarette")} ·{" "}
+                        {isSameDay(entry.at, minuteNow)
+                          ? formatTime(entry.at)
+                          : formatRelativeAgo(entry.at, minuteNow)}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      className="relative size-11 text-muted-foreground hover:text-foreground"
+                      onClick={() => removeTaken(entry)}
+                      aria-label="Remove"
+                    >
+                      <Trash2 className="mx-auto size-4" />
+                    </button>
+                  </li>
+                );
+              }
+              if (item.kind === "loose") {
+                const entry = item.entry;
+                return (
+                  <li
+                    key={entry.id}
+                    className="flex items-center gap-3 rounded-xl px-2 py-1.5 hover:bg-secondary"
+                  >
+                    <span className="flex size-9 items-center justify-center rounded-lg bg-secondary text-muted-foreground">
+                      <HandCoins className="size-4" strokeWidth={1.75} />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm">Loose purchase</p>
+                      <p className="text-xs text-muted-foreground tabular-nums">
+                        {plural(entry.count, "cigarette")} · {formatMoney(entry.cost, settings.currency)} ·{" "}
+                        {isSameDay(entry.at, minuteNow)
+                          ? formatTime(entry.at)
+                          : formatRelativeAgo(entry.at, minuteNow)}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      className="relative size-11 text-muted-foreground hover:text-foreground"
+                      onClick={() => removeLoose(entry)}
                       aria-label="Remove"
                     >
                       <Trash2 className="mx-auto size-4" />
@@ -363,6 +474,150 @@ function ContextGroupBlock({
   );
 }
 
+function AddCigarettesDialog() {
+  const settings = useAshStore((s) => s.settings);
+  const addTaken = useAshStore((s) => s.addTaken);
+  const undoTaken = useAshStore((s) => s.undoTaken);
+  const addLoosePurchase = useAshStore((s) => s.addLoosePurchase);
+  const undoLoosePurchase = useAshStore((s) => s.undoLoosePurchase);
+  const [open, setOpen] = useState(false);
+  const [mode, setMode] = useState<"pick" | "taken" | "loose">("pick");
+  const [count, setCount] = useState("1");
+
+  const perCig =
+    settings.cigsPerPack > 0 ? settings.defaultPackCost / settings.cigsPerPack : 0;
+  const n = Math.max(1, Number(count) || 1);
+  const looseCost = Math.round(perCig * n * 100) / 100;
+
+  function reset() {
+    setMode("pick");
+    setCount("1");
+  }
+
+  function close() {
+    setOpen(false);
+    reset();
+  }
+
+  function submitTaken(e: FormEvent) {
+    e.preventDefault();
+    const entry = addTaken(n);
+    toast(`Logged ${plural(n, "cigarette")} taken`, {
+      action: {
+        label: "Undo",
+        onClick: () => undoTaken(entry.id),
+      },
+    });
+    close();
+  }
+
+  function submitLoose(e: FormEvent) {
+    e.preventDefault();
+    const entry = addLoosePurchase(n);
+    toast(`Logged ${plural(n, "cigarette")} loose · ${formatMoney(entry.cost, settings.currency)}`, {
+      action: {
+        label: "Undo",
+        onClick: () => undoLoosePurchase(entry.id),
+      },
+    });
+    close();
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (!next) reset();
+      }}
+    >
+      <Button type="button" size="sm" onClick={() => setOpen(true)}>
+        <Plus className="size-4" />
+        Add
+      </Button>
+      <DialogContent>
+        {mode === "pick" ? (
+          <div className="grid gap-4">
+            <DialogHeader>
+              <DialogTitle>Add cigarettes</DialogTitle>
+              <DialogDescription>
+                From someone else, or bought loose one at a time.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid grid-cols-2 gap-2">
+              <Button type="button" variant="outline" onClick={() => setMode("taken")}>
+                <Plus className="size-4" />
+                Taken
+              </Button>
+              <Button type="button" variant="outline" onClick={() => setMode("loose")}>
+                <HandCoins className="size-4" />
+                Loose purchase
+              </Button>
+            </div>
+          </div>
+        ) : mode === "taken" ? (
+          <form onSubmit={submitTaken} className="grid gap-4">
+            <DialogHeader>
+              <DialogTitle>Taken</DialogTitle>
+              <DialogDescription>
+                Cigarettes from someone else. No cost is added.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-1.5">
+              <Label htmlFor="taken-count">Cigarettes</Label>
+              <Input
+                id="taken-count"
+                type="number"
+                min={1}
+                inputMode="numeric"
+                value={count}
+                onChange={(e) => setCount(e.target.value)}
+                autoFocus
+              />
+            </div>
+            <DialogFooter className="gap-2 sm:justify-between">
+              <Button type="button" variant="ghost" onClick={() => setMode("pick")}>
+                Back
+              </Button>
+              <Button type="submit">Log</Button>
+            </DialogFooter>
+          </form>
+        ) : (
+          <form onSubmit={submitLoose} className="grid gap-4">
+            <DialogHeader>
+              <DialogTitle>Loose purchase</DialogTitle>
+              <DialogDescription>
+                Single sticks bought loose. Cost is calculated from settings.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-1.5">
+              <Label htmlFor="loose-count">Cigarettes</Label>
+              <Input
+                id="loose-count"
+                type="number"
+                min={1}
+                inputMode="numeric"
+                value={count}
+                onChange={(e) => setCount(e.target.value)}
+                autoFocus
+              />
+              <p className="text-xs text-muted-foreground">
+                {formatMoney(looseCost, settings.currency)} at {formatMoney(perCig, settings.currency)} each
+              </p>
+            </div>
+            <DialogFooter className="gap-2 sm:justify-between">
+              <Button type="button" variant="ghost" onClick={() => setMode("pick")}>
+                Back
+              </Button>
+              <Button type="submit">Log</Button>
+            </DialogFooter>
+          </form>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function GiveAwayDialog() {
   const addGiveAway = useAshStore((s) => s.addGiveAway);
   const undoGiveAway = useAshStore((s) => s.undoGiveAway);
@@ -386,7 +641,7 @@ function GiveAwayDialog() {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <Button type="button" variant="outline" size="sm" onClick={() => setOpen(true)}>
-        <Gift className="size-4" />
+        <Minus className="size-4" />
         Given away
       </Button>
       <DialogContent>

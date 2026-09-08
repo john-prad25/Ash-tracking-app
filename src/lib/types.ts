@@ -38,6 +38,19 @@ export interface GiveAwayLog {
   count: number;
 }
 
+export interface TakenLog {
+  id: string;
+  at: number;
+  count: number;
+}
+
+export interface LoosePurchaseLog {
+  id: string;
+  at: number;
+  count: number;
+  cost: number;
+}
+
 export interface PurchaseLine {
   packs: number;
   cigsPerPack: number;
