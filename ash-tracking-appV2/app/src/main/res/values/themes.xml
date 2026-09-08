@@ -1,0 +1,8 @@
+<resources>
+    <style name="Theme.Ash" parent="Theme.AppCompat.NoActionBar">
+        <item name="android:statusBarColor">@color/ash_bg</item>
+        <item name="android:navigationBarColor">@color/ash_bg</item>
+        <item name="android:windowBackground">@color/ash_bg</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+</resources>
